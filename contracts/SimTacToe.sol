@@ -46,7 +46,7 @@ contract SimTacToe {
     event MovesCollided(uint256 gameId, uint8 x, uint8 y);
     event GameEnded(uint256 gameId, Winner winner);
 
-    function startGame() public {
+    function startGame() external {
         Game memory game;
         game.gameId = gameCount;
         game.playerOne = msg.sender;
@@ -55,7 +55,7 @@ contract SimTacToe {
         gameCount++;
     }
 
-    function joinGame(uint256 _gameId) public {
+    function joinGame(uint256 _gameId) external {
         Game memory game = games[_gameId];
         require(game.playerOne != address(0), "Game not found.");
         require(game.playerTwo == address(0), "Game is already full.");
@@ -64,7 +64,7 @@ contract SimTacToe {
         emit PlayerJoined(_gameId, msg.sender);
     }
 
-    function makeMove(uint256 _gameId, uint8 _x, uint8 _y) public {
+    function makeMove(uint256 _gameId, uint8 _x, uint8 _y) external {
         Game memory game = games[_gameId];
         require(game.playerOne != address(0) && game.playerTwo != address(0), "Game has not started yet.");
         require(game.winner == Winner.None, "Game is finished.");
@@ -171,11 +171,11 @@ contract SimTacToe {
         return true;
     }
 
-    function getGame(uint256 _gameId) public view returns (Game memory) {
+    function getGame(uint256 _gameId) external view returns (Game memory) {
         return games[_gameId];
     }
 
-    function getOpenGames() public view returns (uint256[] memory) {
+    function getOpenGames() external view returns (uint256[] memory) {
         uint256 count = 0;
         for (uint256 i = 0; i < gameCount; i++) {
             if (games[i].playerTwo == address(0)) {
@@ -193,7 +193,7 @@ contract SimTacToe {
         return openGames;
     }
 
-    function getGamesByPlayer(address _player) public view returns (uint256[] memory) {
+    function getGamesByPlayer(address _player) external view returns (uint256[] memory) {
         uint256 count = 0;
         for (uint256 i = 0; i < gameCount; i++) {
             if (games[i].playerOne == _player || games[i].playerTwo == _player) {
