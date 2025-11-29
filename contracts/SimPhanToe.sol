@@ -17,6 +17,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         address player2;
         euint8[3][3] board;     // encrypted Cells
         euint8 winner;          // encrypted Winner
+        ebool collision;        // encrypted flag indicating if the latest moves collided
         bool isFinished;
     }
     
@@ -61,6 +62,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     event MoveInvalid(uint256 indexed gameId, address indexed player);
     event MoveMade(uint256 indexed gameId, address indexed player);
     event MovesProcessed(uint256 indexed gameId);
+    event Collision(uint256 indexed gameId);
     event GameUpdated(uint256 indexed gameId, Winner winner);
 
 
@@ -184,14 +186,23 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @param _gameId The game ID
     /// @param _winner The decrypted winner value
     /// @param _decryptionProof KMS signature proving correct decryption
-    /// @dev Must be called after processing the moves and decrypting the winner value
-    function finalizeGameState(uint256 _gameId, uint8 _winner, bytes memory _decryptionProof) external {
-        // verify decryption of the winner value
+    /// @dev Must be called after processing the moves and decrypting the winner value and the collision flag
+    function finalizeGameState(uint256 _gameId, uint8 _winner, bool _collision, bytes memory _decryptionProof) external {
+        // verify decryption of the winner value and the collision flag
         Game memory game = games[_gameId];
-        bytes32[] memory ciphertextHandles = new bytes32[](1);
+        bytes32[] memory ciphertextHandles = new bytes32[](2);
         ciphertextHandles[0] = FHE.toBytes32(game.winner);
-        bytes memory abiEncodedCleartexts = abi.encode(_winner);
+        ciphertextHandles[1] = FHE.toBytes32(game.collision);
+        bytes memory abiEncodedCleartexts = abi.encode(_winner, _collision);
         FHE.checkSignatures(ciphertextHandles, abiEncodedCleartexts, _decryptionProof);
+        // if moves collided, let the players submit another move
+        if (_collision) {
+            game.collision = FHE.asEbool(false);
+            games[_gameId] = game;
+            emit Collision(_gameId);
+            return;
+            // clients should reflect the collision in the UI and ask the players to submit another move
+        }
         // finish the game if we have a winner
         if (_winner != uint8(Winner.None)) {
             game.isFinished = true;
@@ -251,30 +262,31 @@ contract SimPhanToe is ZamaEthereumConfig {
 
     /// @notice When both moves are submitted, process them and update the game state
     /// @param _gameId The game ID
-    /// @dev Check for collisions and trigger decryption of the winner value, then call finalizeGameState()
+    /// @dev Trigger decryption of the winner value and the collision flag, then call finalizeGameState()
     function processMoves(uint256 _gameId) private {
         Game storage game = games[_gameId];
         Move memory moveOne = nextMoves[_gameId][game.player1];
         Move memory moveTwo = nextMoves[_gameId][game.player2];
         // check for collision
-        ebool collision = FHE.and(FHE.eq(moveOne.x,moveTwo.x), FHE.eq(moveOne.y, moveTwo.y));
-        FHE.allow(collision, game.player1);
-        FHE.allow(collision, game.player2);
+        game.collision = FHE.and(FHE.eq(moveOne.x,moveTwo.x), FHE.eq(moveOne.y, moveTwo.y));
+        FHE.allowThis(game.collision);
+        FHE.makePubliclyDecryptable(game.collision);
         // set the cells according to the moves or don't change anything if they collided
-        setCell(game.board, moveOne.x, moveOne.y, FHE.select(collision, CELL_EMPTY, CELL_PLAYER1));
-        setCell(game.board, moveTwo.x, moveTwo.y, FHE.select(collision, CELL_EMPTY, CELL_PLAYER2));
+        setCell(game.board, moveOne.x, moveOne.y, FHE.select(game.collision, CELL_EMPTY, CELL_PLAYER1));
+        setCell(game.board, moveTwo.x, moveTwo.y, FHE.select(game.collision, CELL_EMPTY, CELL_PLAYER2));
         // technically, if there's a collision no move is made so there's no point in checking the winner,
         // but because we cannot really branch the logic in FHE I guess we can just afford to run it anyways
         // another approach would be to publicly decrypt the collision status to enable branching, but that
         // would require one more transaction, which would be worse UX
         game.winner = whoWins(_gameId);
+        FHE.allowThis(game.winner);
         FHE.makePubliclyDecryptable(game.winner);
         // free nextMoves
         delete nextMoves[_gameId][game.player1];
         delete nextMoves[_gameId][game.player2];
         emit MovesProcessed(_gameId);
-        // clients should check for collision and reflect it in the UI
-        // then trigger decryption of the winner and call finalizeGameState()
+        // clients should trigger decryption of the winner and the collision flag,
+        // reflect the situation accordingly in the UI and call finalizeGameState()
     }
 
     /// @notice Write to a cell in the board in FHE
@@ -282,6 +294,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
                 _board[i][j] = FHE.select(FHE.and(FHE.eq(_x, i), FHE.eq(_y, j)), _cell, _board[i][j]);
+                FHE.allowThis(_board[i][j]);
             }
         }
     }
