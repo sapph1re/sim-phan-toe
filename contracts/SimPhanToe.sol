@@ -106,7 +106,7 @@ contract SimPhanToe is ZamaEthereumConfig {
 
         ebool xValid = FHE.lt(x, 3);
         ebool yValid = FHE.lt(y, 3);
-        ebool cellEmpty = FHE.ne(getCell(game.board, x, y), CELL_EMPTY);
+        ebool cellEmpty = FHE.eq(getCell(game.board, x, y), CELL_EMPTY);
         ebool allValid = FHE.and(FHE.and(xValid, yValid), cellEmpty);
         
         Move memory move = nextMoves[_gameId][msg.sender];
@@ -268,7 +268,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         isDraw = FHE.or(isDraw, FHE.and(player1Wins, player2Wins));
         // if no one is winning then check if the board is full
         ebool noWinners = FHE.and(FHE.and(FHE.not(player1Wins), FHE.not(player2Wins)), FHE.not(isDraw));
-        isDraw = FHE.and(noWinners, isBoardFull(board));
+        isDraw = FHE.or(isDraw, FHE.and(noWinners, isBoardFull(board)));
         // return draw, none or winner
         winner = FHE.select(isDraw, WINNER_DRAW, FHE.select(noWinners, WINNER_NONE, FHE.select(player1Wins, WINNER_PLAYER1, WINNER_PLAYER2)));
         return winner;
@@ -283,7 +283,10 @@ contract SimPhanToe is ZamaEthereumConfig {
             euint8 rowWinner = FHE.select(rowComplete, FHE.select(FHE.eq(_board[i][0], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2), WINNER_NONE);
             // if there's already a winner from another row then it's a draw
             // because one player can't complete two rows at the same time
-            winner = FHE.select(FHE.eq(winner, WINNER_NONE), rowWinner, WINNER_DRAW);
+            ebool rowHasWinner = FHE.ne(rowWinner, WINNER_NONE);
+            ebool alreadyHasWinner = FHE.ne(winner, WINNER_NONE);
+            ebool isDraw = FHE.and(rowHasWinner, alreadyHasWinner);
+            winner = FHE.select(isDraw, WINNER_DRAW, FHE.select(rowHasWinner, rowWinner, winner));
         }
         return winner;
     }
@@ -297,7 +300,10 @@ contract SimPhanToe is ZamaEthereumConfig {
             euint8 columnWinner = FHE.select(columnComplete, FHE.select(FHE.eq(_board[0][i], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2), WINNER_NONE);
             // if there's already a winner from another column then it's a draw
             // because one player can't complete two columns at the same time
-            winner = FHE.select(FHE.eq(winner, WINNER_NONE), columnWinner, WINNER_DRAW);
+            ebool columnHasWinner = FHE.ne(columnWinner, WINNER_NONE);
+            ebool alreadyHasWinner = FHE.ne(winner, WINNER_NONE);
+            ebool isDraw = FHE.and(columnHasWinner, alreadyHasWinner);
+            winner = FHE.select(isDraw, WINNER_DRAW, FHE.select(columnHasWinner, columnWinner, winner));
         }
         return winner;
     }
