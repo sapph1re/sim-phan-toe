@@ -6,6 +6,9 @@ import { ZamaEthereumConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 
 /// @title Simultaneous Phantom Tic-Tac-Toe game with FHEVM
 /// @author Roman V (https://github.com/sapph1re)
+/// @notice A two-player tic-tac-toe game where moves are encrypted
+/// and submitted by both players to be processed simultaneously.
+/// @dev Uses Zama's FHEVM for fully homomorphic encryption of game state
 contract SimPhanToe is ZamaEthereumConfig {
 
     struct Game {
@@ -71,7 +74,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         WINNER_DRAW = FHE.asEuint8(uint8(Winner.Draw));
     }
 
-    function startGame() external {
+    /// @notice Start a new game as player 1
+    /// @dev Initializes Game with player 1 and empty board
+    function startGame() external { 
         Game memory game = Game({
             gameId: gameCount,
             player1: msg.sender,
@@ -85,6 +90,8 @@ contract SimPhanToe is ZamaEthereumConfig {
         gameCount++;
     }
 
+    /// @notice Join a game as player 2
+    /// @param _gameId The ID of the game to join
     function joinGame(uint256 _gameId) external {
         Game memory game = games[_gameId];
         require(game.player1 != address(0), "Game not found.");
@@ -94,6 +101,14 @@ contract SimPhanToe is ZamaEthereumConfig {
         emit PlayerJoined(_gameId, msg.sender);
     }
 
+    /// @notice Submit an encrypted move
+    /// @param _gameId The game ID
+    /// @param _inputX Encrypted X coordinate (0-2)
+    /// @param _inputY Encrypted Y coordinate (0-2)
+    /// @param _inputProof ZK proof for the encrypted inputs
+    /// @dev Move validity is checked in FHE; isInvalid flag is made publicly decryptable,
+    /// clients should reflect the move in the UI and trigger decryption of the isInvalid flag
+    /// then call finalizeMove()
     function submitMove(uint256 _gameId, externalEuint8 _inputX, externalEuint8 _inputY, bytes calldata _inputProof) external {
         Game memory game = games[_gameId];
         require(game.player1 != address(0) && game.player2 != address(0), "Game has not started yet.");
@@ -104,11 +119,13 @@ contract SimPhanToe is ZamaEthereumConfig {
         euint8 x = FHE.fromExternal(_inputX, _inputProof);
         euint8 y = FHE.fromExternal(_inputY, _inputProof);
 
+        // check if the move is valid
         ebool xValid = FHE.lt(x, 3);
         ebool yValid = FHE.lt(y, 3);
         ebool cellEmpty = FHE.eq(getCell(game.board, x, y), CELL_EMPTY);
         ebool allValid = FHE.and(FHE.and(xValid, yValid), cellEmpty);
         
+        // save the move
         Move memory move = nextMoves[_gameId][msg.sender];
         move.x = x;
         move.y = y;
@@ -117,6 +134,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         move.isCellOccupied = FHE.not(cellEmpty);
         nextMoves[_gameId][msg.sender] = move;
 
+        // set access permissions
         FHE.allowThis(move.x);
         FHE.allowThis(move.y);
         FHE.allowThis(move.isInvalid);
@@ -127,8 +145,16 @@ contract SimPhanToe is ZamaEthereumConfig {
         FHE.makePubliclyDecryptable(move.isInvalid);
 
         emit MoveSubmitted(_gameId, msg.sender);
+        // client should reflect the move submission in the UI
+        // then trigger decryption of the isInvalid flag and call finalizeMove()
     }
 
+    /// @notice Finalize a player's move after decryption of its validity
+    /// @param _gameId The game ID
+    /// @param _player The player whose move is being finalized
+    /// @param _isInvalid The decrypted validity flag
+    /// @param _decryptionProof KMS signature proving correct decryption
+    /// @dev Must be called after submitting a move and decrypting the isInvalid flag
     function finalizeMove(uint256 _gameId, address _player, bool _isInvalid, bytes memory _decryptionProof) external {
         // verify decryption of the move.isInvalid flag
         Move memory move = nextMoves[_gameId][_player];
@@ -154,6 +180,11 @@ contract SimPhanToe is ZamaEthereumConfig {
         }
     }
 
+    /// @notice Finalize game state after winner decryption
+    /// @param _gameId The game ID
+    /// @param _winner The decrypted winner value
+    /// @param _decryptionProof KMS signature proving correct decryption
+    /// @dev Must be called after processing the moves and decrypting the winner value
     function finalizeGameState(uint256 _gameId, uint8 _winner, bytes memory _decryptionProof) external {
         // verify decryption of the winner value
         Game memory game = games[_gameId];
@@ -170,10 +201,15 @@ contract SimPhanToe is ZamaEthereumConfig {
         // clients should reflect the new game state and announce the result if finished
     }
 
+    /// @notice Get game data
+    /// @param _gameId The game ID
+    /// @return Game struct
     function getGame(uint256 _gameId) external view returns (Game memory) {
         return games[_gameId];
     }
 
+    /// @notice Get all games waiting for a second player
+    /// @return Array of game IDs
     function getOpenGames() external view returns (uint256[] memory) {
         uint256 count = 0;
         for (uint256 i = 0; i < gameCount; i++) {
@@ -192,6 +228,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         return openGames;
     }
 
+    /// @notice Get all games a player is participating in
+    /// @param _player The player's address
+    /// @return Array of game IDs
     function getGamesByPlayer(address _player) external view returns (uint256[] memory) {
         uint256 count = 0;
         for (uint256 i = 0; i < gameCount; i++) {
@@ -210,6 +249,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         return playerGames;
     }
 
+    /// @notice When both moves are submitted, process them and update the game state
+    /// @param _gameId The game ID
+    /// @dev Check for collisions and trigger decryption of the winner value, then call finalizeGameState()
     function processMoves(uint256 _gameId) private {
         Game storage game = games[_gameId];
         Move memory moveOne = nextMoves[_gameId][game.player1];
@@ -235,6 +277,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         // then trigger decryption of the winner and call finalizeGameState()
     }
 
+    /// @notice Write to a cell in the board in FHE
     function setCell(euint8[3][3] storage _board, euint8 _x, euint8 _y, euint8 _cell) private {
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
@@ -243,6 +286,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         }
     }
 
+    /// @notice Read a cell in the board in FHE
     function getCell(euint8[3][3] memory _board, euint8 _x, euint8 _y) private returns (euint8 cell) {
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
@@ -252,6 +296,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         return cell;
     }
 
+    /// @notice Determine if there's a winner
+    /// @param _gameId The game ID
+    /// @return winner Encrypted Winner enum value
     function whoWins(uint256 _gameId) private returns (euint8 winner) {
         Game memory game = games[_gameId];
         euint8[3][3] memory board = game.board;
@@ -274,6 +321,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
+    /// @notice Determine if there's a winner in any row
+    /// @param _board The board
+    /// @return winner Encrypted Winner enum value
     function whoWinsByRow(euint8[3][3] memory _board) private returns (euint8 winner) {
         winner = WINNER_NONE;
         for (uint8 i = 0; i < 3; i++) {
@@ -291,6 +341,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
+    /// @notice Determine if there's a winner in any column
+    /// @param _board The board
+    /// @return winner Encrypted Winner enum value
     function whoWinsByColumn(euint8[3][3] memory _board) private returns (euint8 winner) {
         winner = WINNER_NONE;
         for (uint8 i = 0; i < 3; i++) {
@@ -308,6 +361,10 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
+
+    /// @notice Determine if there's a winner in any diagonal
+    /// @param _board The board
+    /// @return winner Encrypted Winner enum value
     function whoWinsByDiagonal(euint8[3][3] memory _board) private returns (euint8 winner) {
         // check if any diagonal is complete
         ebool mainDiagonalEqual = FHE.and(FHE.eq(_board[0][0], _board[1][1]), FHE.eq(_board[1][1], _board[2][2]));
@@ -317,6 +374,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
+    /// @notice Determine if the board is full
+    /// @param _board The board
+    /// @return isFull Encrypted boolean value
     function isBoardFull(euint8[3][3] memory _board) private returns (ebool isFull) {
         isFull = FHE.asEbool(true);
         for (uint8 i = 0; i < 3; i++) {
