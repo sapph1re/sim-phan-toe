@@ -52,15 +52,13 @@ contract SimPhanToe is ZamaEthereumConfig {
     euint8 internal WINNER_PLAYER2;
     euint8 internal WINNER_DRAW;
 
-    // TODO: other fields indexed too?
-    event GameStarted(uint256 gameId, address player1);
-    event PlayerJoined(uint256 gameId, address player2);
-    event MoveSubmitted(uint256 gameId, address player);
-    event MoveInvalid(uint256 gameId, address player);
-    event MoveMade(uint256 gameId, address player);
-    event MovesProcessed(uint256 gameId);
-    event GameUpdated(uint256 gameId, Winner winner);
-    event ErrorChanged(uint256 indexed gameId, address indexed player);
+    event GameStarted(uint256 indexed gameId, address indexed player1);
+    event PlayerJoined(uint256 indexed gameId, address indexed player2);
+    event MoveSubmitted(uint256 indexed gameId, address indexed player);
+    event MoveInvalid(uint256 indexed gameId, address indexed player);
+    event MoveMade(uint256 indexed gameId, address indexed player);
+    event MovesProcessed(uint256 indexed gameId);
+    event GameUpdated(uint256 indexed gameId, Winner winner);
 
 
     constructor() {
@@ -74,11 +72,16 @@ contract SimPhanToe is ZamaEthereumConfig {
     }
 
     function startGame() external {
-        Game memory game;
-        game.gameId = gameCount;
-        game.player1 = msg.sender;
+        Game memory game = Game({
+            gameId: gameCount,
+            player1: msg.sender,
+            player2: address(0),
+            board: [[CELL_EMPTY, CELL_EMPTY, CELL_EMPTY], [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY], [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY]],
+            winner: WINNER_NONE,
+            isFinished: false
+        });
         games.push(game);
-        emit GameStarted(gameCount, msg.sender);
+        emit GameStarted(game.gameId, game.player1);
         gameCount++;
     }
 
@@ -103,7 +106,7 @@ contract SimPhanToe is ZamaEthereumConfig {
 
         ebool xValid = FHE.lt(x, 3);
         ebool yValid = FHE.lt(y, 3);
-        ebool cellOccupied = isCellOccupied(game.board, x, y);
+        ebool cellEmpty = FHE.ne(getCell(game.board, x, y), CELL_EMPTY);
         ebool allValid = FHE.and(FHE.and(xValid, yValid), cellEmpty);
         
         Move memory move = nextMoves[_gameId][msg.sender];
@@ -111,7 +114,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         move.y = y;
         move.isSubmitted = true;
         move.isInvalid = FHE.not(allValid);
-        move.isCellOccupied = isCellOccupied;
+        move.isCellOccupied = FHE.not(cellEmpty);
         nextMoves[_gameId][msg.sender] = move;
 
         FHE.allowThis(move.x);
@@ -223,7 +226,6 @@ contract SimPhanToe is ZamaEthereumConfig {
         // another approach would be to publicly decrypt the collision status to enable branching, but that
         // would require one more transaction, which would be worse UX
         game.winner = whoWins(_gameId);
-        games[_gameId] = game;
         FHE.makePubliclyDecryptable(game.winner);
         // free nextMoves
         nextMoves[_gameId][game.player1] = Move();
@@ -241,10 +243,6 @@ contract SimPhanToe is ZamaEthereumConfig {
         }
     }
 
-    function isCellOccupied(euint8[3][3] memory _board, euint8 _x, euint8 _y) private pure returns (ebool) {
-        return FHE.ne(getCell(_board, _x, _y), uint8(Cell.Empty));
-    }
-
     function getCell(euint8[3][3] memory _board, euint8 _x, euint8 _y) private pure returns (euint8 cell) {
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
@@ -254,7 +252,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         return cell;
     }
 
-    function whoWins(uint256 _gameId) private pure returns (euint8 winner) {
+    function whoWins(uint256 _gameId) private view returns (euint8 winner) {
         Game memory game = games[_gameId];
         euint8[3][3] memory board = game.board;
         // check each row, column and diagonal for winners
@@ -262,10 +260,10 @@ contract SimPhanToe is ZamaEthereumConfig {
         euint8 winnerColumn = whoWinsByColumn(board);
         euint8 winnerDiagonal = whoWinsByDiagonal(board);
         // if we have a draw on any of them then it's a draw
-        ebool isDraw = FHE.or(FHE.eq(winnerRow, WINNER_DRAW), FHE.eq(winnerColumn, WINNER_DRAW), FHE.eq(winnerDiagonal, WINNER_DRAW));
+        ebool isDraw = FHE.or(FHE.or(FHE.eq(winnerRow, WINNER_DRAW), FHE.eq(winnerColumn, WINNER_DRAW)), FHE.eq(winnerDiagonal, WINNER_DRAW));
         // check if either player has won
-        ebool player1Wins = FHE.or(FHE.eq(winnerRow, WINNER_PLAYER1), FHE.eq(winnerColumn, WINNER_PLAYER1), FHE.eq(winnerDiagonal, WINNER_PLAYER1));
-        ebool player2Wins = FHE.or(FHE.eq(winnerRow, WINNER_PLAYER2), FHE.eq(winnerColumn, WINNER_PLAYER2), FHE.eq(winnerDiagonal, WINNER_PLAYER2));
+        ebool player1Wins = FHE.or(FHE.or(FHE.eq(winnerRow, WINNER_PLAYER1), FHE.eq(winnerColumn, WINNER_PLAYER1)), FHE.eq(winnerDiagonal, WINNER_PLAYER1));
+        ebool player2Wins = FHE.or(FHE.or(FHE.eq(winnerRow, WINNER_PLAYER2), FHE.eq(winnerColumn, WINNER_PLAYER2)), FHE.eq(winnerDiagonal, WINNER_PLAYER2));
         // if both won it's a draw
         isDraw = FHE.or(isDraw, FHE.and(player1Wins, player2Wins));
         // if no one is winning then check if the board is full
@@ -276,7 +274,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
-    function whoWinsByRow(euint8[3][3] memory _board) private pure returns (euint8 winner) {
+    function whoWinsByRow(euint8[3][3] memory _board) private view returns (euint8 winner) {
         winner = WINNER_NONE;
         for (uint8 i = 0; i < 3; i++) {
             // check each row if it's complete
@@ -290,7 +288,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
-    function whoWinsByColumn(euint8[3][3] memory _board) private pure returns (euint8 winner) {
+    function whoWinsByColumn(euint8[3][3] memory _board) private view returns (euint8 winner) {
         winner = WINNER_NONE;
         for (uint8 i = 0; i < 3; i++) {
             // check each column if it's complete
@@ -304,16 +302,16 @@ contract SimPhanToe is ZamaEthereumConfig {
         return winner;
     }
 
-    function whoWinsByDiagonal(euint8[3][3] memory _board) private pure returns (euint8 winner) {
+    function whoWinsByDiagonal(euint8[3][3] memory _board) private view returns (euint8 winner) {
         // check if any diagonal is complete
-        ebool mainDiagonalEqual = FHE.and(FHE.and(FHE.eq(_board[0][0], _board[1][1]), FHE.eq(_board[1][1], _board[2][2])));
-        ebool antiDiagonalEqual = FHE.and(FHE.and(FHE.eq(_board[0][2], _board[1][1]), FHE.eq(_board[1][1], _board[2][0])));
+        ebool mainDiagonalEqual = FHE.and(FHE.eq(_board[0][0], _board[1][1]), FHE.eq(_board[1][1], _board[2][2]));
+        ebool antiDiagonalEqual = FHE.and(FHE.eq(_board[0][2], _board[1][1]), FHE.eq(_board[1][1], _board[2][0]));
         // if the center cell is not empty and any diagonal is equal then the center cell owner is the winner
         winner = FHE.select(FHE.and(FHE.ne(_board[1][1], CELL_EMPTY), FHE.or(mainDiagonalEqual, antiDiagonalEqual)), FHE.select(FHE.eq(_board[1][1], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2), WINNER_NONE);
         return winner;
     }
 
-    function isBoardFull(euint8[3][3] memory _board) private pure returns (ebool isFull) {
+    function isBoardFull(euint8[3][3] memory _board) private view returns (ebool isFull) {
         isFull = FHE.asEbool(true);
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
