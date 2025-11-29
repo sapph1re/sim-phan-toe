@@ -1,17 +1,16 @@
 {
-  "name": "fhevm-hardhat-template",
-  "description": "Hardhat-based template for developing FHEVM Solidity smart contracts",
-  "version": "0.3.0-1",
+  "name": "sim-phan-toe",
+  "description": "Simultaneous Phantom Tic-Tac-Toe game with FHEVM",
+  "version": "0.1.0",
+  "private": true,
   "engines": {
     "node": ">=20",
     "npm": ">=7.0.0"
   },
+  "workspaces": [
+    "frontend"
+  ],
   "license": "BSD-3-Clause-Clear",
-  "homepage": "https://github.com/zama-ai/fhevm-hardhat-template/README.md",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/zama-ai/fhevm-hardhat-template.git"
-  },
   "keywords": [
     "fhevm",
     "zama",
@@ -81,7 +80,10 @@
     "chain": "hardhat node --network hardhat --no-deploy",
     "deploy:localhost": "hardhat deploy --network localhost",
     "deploy:sepolia": "hardhat deploy --network sepolia",
-    "verify:sepolia": "hardhat verify --network sepolia"
+    "verify:sepolia": "hardhat verify --network sepolia",
+    "frontend:dev": "npm run dev --workspace=frontend",
+    "frontend:build": "npm run build --workspace=frontend",
+    "dev": "npm run frontend:dev"
   },
   "overrides": {
     "ws@>=7.0.0 <7.5.10": ">=7.5.10",
