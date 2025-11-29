@@ -8,17 +8,13 @@ import { ZamaEthereumConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 /// @author Roman V (https://github.com/sapph1re)
 contract SimPhanToe is ZamaEthereumConfig {
 
-    struct LastError {
-        euint8 error;
-        uint timestamp;
-    }
-
     struct Game {
         uint256 gameId;
         address player1;
         address player2;
         euint8[3][3] board;     // encrypted Cells
         euint8 winner;          // encrypted Winner
+        bool isFinished;
     }
     
     struct Move {
@@ -46,12 +42,6 @@ contract SimPhanToe is ZamaEthereumConfig {
     Game[] public games;
     uint256 public gameCount = 0;
     mapping(uint256 => mapping(address => Move)) public nextMoves;
-    mapping(uint256 => mapping(address => LastError)) public lastErrors;
-
-    // errors
-    euint8 internal NO_ERROR;
-    euint8 internal MOVES_COLLIDED;
-    // TODO: using it or not?
 
     // encrypted enums
     euint8 internal CELL_EMPTY;
@@ -69,13 +59,11 @@ contract SimPhanToe is ZamaEthereumConfig {
     event MoveInvalid(uint256 gameId, address player);
     event MoveMade(uint256 gameId, address player);
     event MovesProcessed(uint256 gameId);
-    event GameEnded(uint256 gameId, Winner winner);
+    event GameUpdated(uint256 gameId, Winner winner);
     event ErrorChanged(uint256 indexed gameId, address indexed player);
 
 
     constructor() {
-        NO_ERROR = FHE.asEuint8(0);
-        MOVES_COLLIDED = FHE.asEuint8(1);
         CELL_EMPTY = FHE.asEuint8(uint8(Cell.Empty));
         CELL_PLAYER1 = FHE.asEuint8(uint8(Cell.Player1));
         CELL_PLAYER2 = FHE.asEuint8(uint8(Cell.Player2));
@@ -106,7 +94,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     function submitMove(uint256 _gameId, externalEuint8 _inputX, externalEuint8 _inputY, bytes calldata _inputProof) external {
         Game memory game = games[_gameId];
         require(game.player1 != address(0) && game.player2 != address(0), "Game has not started yet.");
-        require(game.winner == Winner.None, "Game is finished.");
+        require(!game.isFinished, "Game is finished.");
         require(msg.sender == game.player1 || msg.sender == game.player2, "You are not a player in this game.");
         require(!nextMoves[_gameId][msg.sender].isSubmitted, "Move already submitted.");
         
@@ -163,6 +151,22 @@ contract SimPhanToe is ZamaEthereumConfig {
         }
     }
 
+    function finalizeGameState(uint256 _gameId, uint8 _winner, bytes memory _decryptionProof) external {
+        // verify decryption of the winner value
+        Game memory game = games[_gameId];
+        bytes32[] memory ciphertextHandles = new bytes32[](1);
+        ciphertextHandles[0] = FHE.toBytes32(game.winner);
+        bytes memory abiEncodedCleartexts = abi.encode(_winner);
+        FHE.checkSignatures(ciphertextHandles, abiEncodedCleartexts, _decryptionProof);
+        // finish the game if we have a winner
+        if (_winner != uint8(Winner.None)) {
+            game.isFinished = true;
+            games[_gameId] = game;
+        }
+        emit GameUpdated(_gameId, Winner(_winner));
+        // clients should reflect the new game state and announce the result if finished
+    }
+
     function getGame(uint256 _gameId) external view returns (Game memory) {
         return games[_gameId];
     }
@@ -203,16 +207,6 @@ contract SimPhanToe is ZamaEthereumConfig {
         return playerGames;
     }
 
-    function getLastError(uint256 _gameId) external view returns (euint8 error, uint timestamp) {
-        LastError memory lastError = lastErrors[_gameId][msg.sender];
-        return (lastError.error, lastError.timestamp);
-    }
-
-    function setLastError(uint256 _gameId, address _player, euint8 _error) private {
-        lastErrors[_gameId][_player] = LastError(_error, block.timestamp);
-        emit ErrorChanged(_gameId, _player);
-    }
-
     function processMoves(uint256 _gameId) private {
         Game storage game = games[_gameId];
         Move memory moveOne = nextMoves[_gameId][game.player1];
@@ -236,7 +230,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         nextMoves[_gameId][game.player2] = Move();
         emit MovesProcessed(_gameId);
         // clients should check for collision and reflect it in the UI
-        // then trigger decryption of the winner and call 
+        // then trigger decryption of the winner and call finalizeGameState()
     }
 
     function setCell(euint8[3][3] storage _board, euint8 _x, euint8 _y, euint8 _cell) private {
