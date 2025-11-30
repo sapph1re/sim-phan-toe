@@ -2,6 +2,12 @@
 fhevmTemp
 tmp
 
+# frontend (has its own eslint config)
+frontend
+
+# scripts (not in root tsconfig)
+scripts
+
 # directories
 .coverage_artifacts
 .coverage_cache

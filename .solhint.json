@@ -5,8 +5,16 @@
     "compiler-version": ["error", ">=0.8.4"],
     "func-visibility": ["error", { "ignoreConstructors": true }],
     "max-line-length": ["error", 120],
-    "named-parameters-mapping": "warn",
+    "named-parameters-mapping": "off",
     "no-console": "off",
-    "not-rely-on-time": "off"
+    "not-rely-on-time": "off",
+    "use-natspec": "off",
+    "var-name-mixedcase": "off",
+    "gas-increment-by-one": "off",
+    "gas-custom-errors": "off",
+    "gas-indexed-events": "off",
+    "gas-calldata-parameters": "off",
+    "gas-small-strings": "off",
+    "reason-string": "off"
   }
 }

@@ -1,5 +1,4 @@
 import { SimPhanToe, SimPhanToe__factory } from "../types";
-import { FhevmType } from "@fhevm/hardhat-plugin";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, fhevm } from "hardhat";
