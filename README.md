@@ -5,18 +5,6 @@ Simultaneous Phantom Tic-Tac-Toe game with FHEVM
 A twist on the classic game where both players make their moves **simultaneously**. No first-mover advantage. Opponent's
 moves are encrypted and hidden.
 
-## Game Versions
-
-This project includes two game versions:
-
-| Game           | Description                          | Board Visibility            |
-| -------------- | ------------------------------------ | --------------------------- |
-| **SimTacToe**  | Unencrypted simultaneous tic-tac-toe | Full board visible          |
-| **SimPhanToe** | FHE-encrypted phantom tic-tac-toe    | Only your own moves visible |
-
-SimPhanToe is the main version of the game. SimTacToe is a preparatory step used for the development of the encrypted
-version.
-
 ## Game Rules
 
 1. **Simultaneous Moves**: Both players select their cell at the same time. Your opponent can't see your choice!
@@ -78,22 +66,12 @@ npx hardhat node
 In another terminal, deploy the contracts:
 
 ```bash
-npm run deploy:localhost
+npm run deploy:simphantoe:localhost
 ```
 
-Note the deployed contract addresses from the output.
+Note the deployed SimPhanToe contract address from the output.
 
 ### 6. Configure Frontend
-
-Create environment files for each frontend:
-
-**For SimTacToe:**
-
-```bash
-echo "VITE_SIMTACTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simtactoe/.env
-```
-
-**For SimPhanToe:**
 
 ```bash
 echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
@@ -101,19 +79,12 @@ echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
 
 ### 7. Run Frontend
 
-**Run SimTacToe (unencrypted version):**
-
-```bash
-npm run dev:simtactoe
-```
-
-**Run SimPhanToe (FHE encrypted version):**
-
 ```bash
 npm run dev:simphantoe
 ```
 
-Open http://localhost:5173 in your browser to play the game.
+Open http://localhost:5173 in your browser. Note that FHE features are unavailable in the local development environment,
+so you can't play it on localhost. You will need to deploy to Sepolia to play the game.
 
 ## FHE Development Workflow
 
@@ -198,6 +169,9 @@ echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
 ├── hardhat.config.ts         # Hardhat configuration
 └── package.json              # Root dependencies and scripts
 ```
+
+Note: **SimTacToe** is an unencrypted version of the game where all moves are visible. As a game it doesn't really make
+sense on its own, but its development was a preparatory step before the encrypted version.
 
 ## Available Scripts
 
