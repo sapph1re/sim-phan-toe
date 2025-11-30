@@ -5,6 +5,10 @@ Simultaneous Phantom Tic-Tac-Toe game with FHEVM
 A twist on the classic game where both players make their moves **simultaneously**. No first-mover advantage. Opponent's
 moves are encrypted and hidden.
 
+## Demo
+
+https://simphantoe.netlify.app/
+
 ## Game Rules
 
 1. **Simultaneous Moves**: Both players select their cell at the same time. Your opponent can't see your choice!
