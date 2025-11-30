@@ -296,7 +296,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     function setCell(euint8[3][3] storage _board, euint8 _x, euint8 _y, euint8 _cell) private {
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
-                _board[i][j] = FHE.select(FHE.and(FHE.eq(_x, i), FHE.eq(_y, j)), _cell, _board[i][j]);
+                _board[i][j] = FHE.select(FHE.and(FHE.eq(_y, i), FHE.eq(_x, j)), _cell, _board[i][j]);
                 FHE.allowThis(_board[i][j]);
             }
         }
@@ -306,7 +306,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     function getCell(euint8[3][3] memory _board, euint8 _x, euint8 _y) private returns (euint8 cell) {
         for (uint8 i = 0; i < 3; i++) {
             for (uint8 j = 0; j < 3; j++) {
-                cell = FHE.select(FHE.and(FHE.eq(_x, i), FHE.eq(_y, j)), _board[i][j], cell);
+                cell = FHE.select(FHE.and(FHE.eq(_y, i), FHE.eq(_x, j)), _board[i][j], cell);
             }
         }
         return cell;
