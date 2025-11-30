@@ -12,13 +12,17 @@ const localhost = {
   },
 } as const
 
+// Use environment variable for Sepolia RPC, fallback to public RPCs
+// Public RPCs from chainlist - no API key required
+const SEPOLIA_RPC_URL = import.meta.env.VITE_SEPOLIA_RPC_URL || 'https://1rpc.io/sepolia'
+
 export const config = getDefaultConfig({
   appName: 'SimPhanToe',
   projectId: 'simphantoe-dev', // For WalletConnect - use a real one in production
   chains: [localhost, sepolia],
   transports: {
     [localhost.id]: http('http://127.0.0.1:8545'),
-    [sepolia.id]: http(),
+    [sepolia.id]: http(SEPOLIA_RPC_URL),
   },
 })
 

@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { useAccount, useChainId } from "wagmi";
-// Import from bundle - works with the UMD CDN loaded in index.html
+// Import from web module (self-contained, includes WASM)
 // See: https://docs.zama.org/protocol/relayer-sdk-guides/development-guide/web-applications
-import { initSDK, createInstance, SepoliaConfig } from "@zama-fhe/relayer-sdk/bundle";
+import { initSDK, createInstance, SepoliaConfig } from "@zama-fhe/relayer-sdk/web";
 
 // Sepolia chain ID
 const SEPOLIA_CHAIN_ID = 11155111;
