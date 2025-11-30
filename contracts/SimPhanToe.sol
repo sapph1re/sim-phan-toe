@@ -85,6 +85,7 @@ contract SimPhanToe is ZamaEthereumConfig {
             player2: address(0),
             board: [[CELL_EMPTY, CELL_EMPTY, CELL_EMPTY], [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY], [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY]],
             winner: WINNER_NONE,
+            collision: FHE.asEbool(false),
             isFinished: false
         });
         games.push(game);
@@ -185,6 +186,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @notice Finalize game state after winner decryption
     /// @param _gameId The game ID
     /// @param _winner The decrypted winner value
+    /// @param _collision The decrypted collision flag
     /// @param _decryptionProof KMS signature proving correct decryption
     /// @dev Must be called after processing the moves and decrypting the winner value and the collision flag
     function finalizeGameState(uint256 _gameId, uint8 _winner, bool _collision, bytes memory _decryptionProof) external {
@@ -198,6 +200,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         // if moves collided, let the players submit another move
         if (_collision) {
             game.collision = FHE.asEbool(false);
+            FHE.allowThis(game.collision);
             games[_gameId] = game;
             emit Collision(_gameId);
             return;
