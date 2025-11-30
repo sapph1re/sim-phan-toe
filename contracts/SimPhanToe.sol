@@ -74,6 +74,14 @@ contract SimPhanToe is ZamaEthereumConfig {
         WINNER_PLAYER1 = FHE.asEuint8(uint8(Winner.Player1));
         WINNER_PLAYER2 = FHE.asEuint8(uint8(Winner.Player2));
         WINNER_DRAW = FHE.asEuint8(uint8(Winner.Draw));
+        // Grant the contract permission to use these encrypted constants
+        FHE.allowThis(CELL_EMPTY);
+        FHE.allowThis(CELL_PLAYER1);
+        FHE.allowThis(CELL_PLAYER2);
+        FHE.allowThis(WINNER_NONE);
+        FHE.allowThis(WINNER_PLAYER1);
+        FHE.allowThis(WINNER_PLAYER2);
+        FHE.allowThis(WINNER_DRAW);
     }
 
     /// @notice Start a new game as player 1
@@ -89,6 +97,14 @@ contract SimPhanToe is ZamaEthereumConfig {
             isFinished: false
         });
         games.push(game);
+        // Grant the contract permission to use the game's encrypted values
+        FHE.allowThis(games[gameCount].winner);
+        FHE.allowThis(games[gameCount].collision);
+        for (uint8 i = 0; i < 3; i++) {
+            for (uint8 j = 0; j < 3; j++) {
+                FHE.allowThis(games[gameCount].board[i][j]);
+            }
+        }
         emit GameStarted(game.gameId, game.player1);
         gameCount++;
     }
