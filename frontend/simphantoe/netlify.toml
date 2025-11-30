@@ -1,0 +1,40 @@
+# Netlify configuration for SimPhanToe
+# https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Build command
+  command = "npm install && npm run build"
+  # Output directory (Vite default)
+  publish = "dist"
+
+# Production context
+[context.production]
+  environment = { NODE_VERSION = "20" }
+
+# Preview/branch deploys
+[context.deploy-preview]
+  environment = { NODE_VERSION = "20" }
+
+# Headers configuration
+# CRITICAL: These headers are required for SharedArrayBuffer support
+# which is needed by the Zama FHE SDK WASM modules
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+# WASM files need correct MIME type
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+# SPA fallback - redirect all routes to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

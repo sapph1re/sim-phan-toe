@@ -170,13 +170,13 @@ export function useSubmitMove() {
       if (!encrypted) throw new Error("Failed to encrypt move");
 
       // Step 2: Submit the encrypted move to the contract
-      // Convert Uint8Arrays to hex strings for viem
-      const handle0Hex =
-        encrypted.handles[0] instanceof Uint8Array ? toHex(encrypted.handles[0]) : encrypted.handles[0];
-      const handle1Hex =
-        encrypted.handles[1] instanceof Uint8Array ? toHex(encrypted.handles[1]) : encrypted.handles[1];
-      const inputProofHex =
-        encrypted.inputProof instanceof Uint8Array ? toHex(encrypted.inputProof) : encrypted.inputProof;
+      // Convert Uint8Arrays to hex strings for viem (SDK may return either format)
+      const handle0 = encrypted.handles[0] as `0x${string}` | Uint8Array;
+      const handle1 = encrypted.handles[1] as `0x${string}` | Uint8Array;
+      const inputProof = encrypted.inputProof as `0x${string}` | Uint8Array;
+      const handle0Hex = handle0 instanceof Uint8Array ? toHex(handle0) : handle0;
+      const handle1Hex = handle1 instanceof Uint8Array ? toHex(handle1) : handle1;
+      const inputProofHex = inputProof instanceof Uint8Array ? toHex(inputProof) : inputProof;
       console.log("Step 2: Submitting to contract...", {
         handle0Hex,
         handle1Hex,

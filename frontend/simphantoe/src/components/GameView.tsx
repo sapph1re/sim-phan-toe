@@ -3,7 +3,7 @@ import { GameBoard } from "./GameBoard";
 import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
 import { FHEStatus } from "./FHEStatus";
 import { useGameFlow, useStartGame } from "../hooks/useSimPhanToe";
-import { Winner, GamePhase } from "../lib/contracts";
+import { Winner } from "../lib/contracts";
 
 interface GameViewProps {
   gameId: bigint;
@@ -26,7 +26,6 @@ export function GameView({ gameId, onBack }: GameViewProps) {
     myLocalMoves,
     currentRoundMove,
     addLocalMove,
-    refetchGame,
     handleSubmitMove,
     handleRetry,
     fheStatus,
@@ -40,7 +39,6 @@ export function GameView({ gameId, onBack }: GameViewProps) {
     showCollision,
     setShowCollision,
     showGameOver,
-    setShowGameOver,
     lastWinner,
   } = useGameFlow(gameId);
 

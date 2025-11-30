@@ -1,0 +1,12 @@
+# Netlify headers file (backup to netlify.toml)
+# CRITICAL: These headers enable SharedArrayBuffer for FHE WASM
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+/*.wasm
+  Content-Type: application/wasm
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+

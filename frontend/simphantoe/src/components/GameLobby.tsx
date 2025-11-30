@@ -6,7 +6,6 @@ import {
   useJoinGame,
   useGame
 } from '../hooks/useSimPhanToe'
-import { Winner } from '../lib/contracts'
 
 interface GameLobbyProps {
   onSelectGame: (gameId: bigint) => void
@@ -198,14 +197,12 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
 }
 
 function PlayerGameCard({ gameId, onSelect }: { gameId: bigint; onSelect: () => void }) {
-  const { address } = useAccount()
   const { data: game } = useGame(gameId)
 
   if (!game) return null
 
   const isWaiting = game.player2 === '0x0000000000000000000000000000000000000000'
   const isFinished = game.isFinished
-  const isPlayer1 = address === game.player1
 
   let status = ''
   let statusColor = ''
