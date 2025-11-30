@@ -232,8 +232,7 @@ export const SIMPHANTOE_ABI = [
   },
 ] as const;
 
-// Contract address - update this after deployment
-// For local development, this will be set after running `npx hardhat deploy --network localhost`
+// Contract address - set via VITE_SIMPHANTOE_ADDRESS environment variable after deploying to Sepolia
 export const SIMPHANTOE_ADDRESS = import.meta.env.VITE_SIMPHANTOE_ADDRESS as `0x${string}` | undefined;
 
 // Cell enum values matching the contract (these are encrypted in the actual game)

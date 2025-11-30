@@ -10,7 +10,6 @@ import { useFHE } from "../lib/fhe";
 const NETWORK_NAMES: Record<number, string> = {
   1: "Ethereum",
   11155111: "Sepolia",
-  31337: "Localhost",
 };
 
 export function Layout() {
@@ -223,9 +222,9 @@ function ContractNotConfigured() {
         </p>
 
         <div className="glass-darker p-4 text-left text-sm font-mono">
-          <p className="text-gray-500 mb-2"># Deploy the contract:</p>
-          <p className="text-cyber-cyan">npx hardhat deploy --network localhost</p>
-          <p className="text-gray-500 mt-4 mb-2"># Then create .env file:</p>
+          <p className="text-gray-500 mb-2"># Deploy the contract to Sepolia:</p>
+          <p className="text-cyber-cyan">npx hardhat deploy --network sepolia</p>
+          <p className="text-gray-500 mt-4 mb-2"># Then set in .env file:</p>
           <p className="text-cyber-cyan">VITE_SIMPHANTOE_ADDRESS=0x...</p>
         </div>
       </div>
