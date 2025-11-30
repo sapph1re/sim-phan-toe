@@ -1,29 +1,29 @@
-import { http } from 'wagmi'
-import { hardhat, sepolia } from 'wagmi/chains'
-import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { http } from "wagmi";
+import { hardhat, sepolia } from "wagmi/chains";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 
 // Custom Hardhat chain config to ensure correct settings
 const localhost = {
   ...hardhat,
   id: 31337,
-  name: 'Localhost',
+  name: "Localhost",
   rpcUrls: {
-    default: { http: ['http://127.0.0.1:8545'] },
+    default: { http: ["http://127.0.0.1:8545"] },
   },
-} as const
+} as const;
 
 export const config = getDefaultConfig({
-  appName: 'SimTacToe',
-  projectId: 'simtactoe-dev', // For WalletConnect - use a real one in production
+  appName: "SimTacToe",
+  projectId: "simtactoe-dev", // For WalletConnect - use a real one in production
   chains: [localhost, sepolia],
   transports: {
-    [localhost.id]: http('http://127.0.0.1:8545'),
+    [localhost.id]: http("http://127.0.0.1:8545"),
     [sepolia.id]: http(),
   },
-})
+});
 
-declare module 'wagmi' {
+declare module "wagmi" {
   interface Register {
-    config: typeof config
+    config: typeof config;
   }
 }

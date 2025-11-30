@@ -126,17 +126,13 @@ describe("SimPhanToe", function () {
     });
 
     it("should not allow player1 to join their own game", async function () {
-      await expect(contract.connect(signers.player1).joinGame(0)).to.be.revertedWith(
-        "Cannot join your own game."
-      );
+      await expect(contract.connect(signers.player1).joinGame(0)).to.be.revertedWith("Cannot join your own game.");
     });
 
     it("should not allow joining a full game", async function () {
       await contract.connect(signers.player2).joinGame(0);
 
-      await expect(contract.connect(signers.deployer).joinGame(0)).to.be.revertedWith(
-        "Game is already full."
-      );
+      await expect(contract.connect(signers.deployer).joinGame(0)).to.be.revertedWith("Game is already full.");
     });
   });
 
@@ -186,7 +182,7 @@ describe("SimPhanToe", function () {
       await expect(
         contract
           .connect(signers.player1)
-          .submitMove(0, encryptedMove.handles[0], encryptedMove.handles[1], encryptedMove.inputProof)
+          .submitMove(0, encryptedMove.handles[0], encryptedMove.handles[1], encryptedMove.inputProof),
       )
         .to.emit(contract, "MoveSubmitted")
         .withArgs(0n, signers.player1.address);
@@ -227,7 +223,7 @@ describe("SimPhanToe", function () {
       await expect(
         contract
           .connect(signers.player1)
-          .submitMove(0, encryptedMove2.handles[0], encryptedMove2.handles[1], encryptedMove2.inputProof)
+          .submitMove(0, encryptedMove2.handles[0], encryptedMove2.handles[1], encryptedMove2.inputProof),
       ).to.be.revertedWith("Move already submitted.");
     });
 
@@ -241,7 +237,7 @@ describe("SimPhanToe", function () {
       await expect(
         contract
           .connect(signers.deployer)
-          .submitMove(0, encryptedMove.handles[0], encryptedMove.handles[1], encryptedMove.inputProof)
+          .submitMove(0, encryptedMove.handles[0], encryptedMove.handles[1], encryptedMove.inputProof),
       ).to.be.revertedWith("You are not a player in this game.");
     });
   });
@@ -337,17 +333,13 @@ describe("SimPhanToe", function () {
 
       // Finalize player 1's move
       const [move1Before] = await contract.getMoves(0);
-      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([
-        move1Before.isInvalid,
-      ]);
+      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([move1Before.isInvalid]);
       const isInvalid1 = clearValues1[move1Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player1.address, isInvalid1, proof1);
 
       // Finalize player 2's move - this should trigger processMoves
       const [, move2Before] = await contract.getMoves(0);
-      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([
-        move2Before.isInvalid,
-      ]);
+      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([move2Before.isInvalid]);
       const isInvalid2 = clearValues2[move2Before.isInvalid as `0x${string}`] as boolean;
 
       await expect(contract.finalizeMove(0, signers.player2.address, isInvalid2, proof2))
@@ -388,16 +380,12 @@ describe("SimPhanToe", function () {
 
       // Finalize both moves
       const [move1Before] = await contract.getMoves(0);
-      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([
-        move1Before.isInvalid,
-      ]);
+      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([move1Before.isInvalid]);
       const isInvalid1 = clearValues1[move1Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player1.address, isInvalid1, proof1);
 
       const [, move2Before] = await contract.getMoves(0);
-      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([
-        move2Before.isInvalid,
-      ]);
+      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([move2Before.isInvalid]);
       const isInvalid2 = clearValues2[move2Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player2.address, isInvalid2, proof2);
 
@@ -425,12 +413,7 @@ describe("SimPhanToe", function () {
     });
 
     // Helper function to submit and finalize moves for both players
-    async function submitAndFinalizeMoves(
-      p1x: number,
-      p1y: number,
-      p2x: number,
-      p2y: number
-    ): Promise<void> {
+    async function submitAndFinalizeMoves(p1x: number, p1y: number, p2x: number, p2y: number): Promise<void> {
       // Player 1 submits move
       const encryptedMove1 = await fhevm
         .createEncryptedInput(contractAddress, signers.player1.address)
@@ -455,17 +438,13 @@ describe("SimPhanToe", function () {
 
       // Finalize player 1's move
       const [move1Before] = await contract.getMoves(0);
-      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([
-        move1Before.isInvalid,
-      ]);
+      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([move1Before.isInvalid]);
       const isInvalid1 = clearValues1[move1Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player1.address, isInvalid1, proof1);
 
       // Finalize player 2's move
       const [, move2Before] = await contract.getMoves(0);
-      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([
-        move2Before.isInvalid,
-      ]);
+      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([move2Before.isInvalid]);
       const isInvalid2 = clearValues2[move2Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player2.address, isInvalid2, proof2);
 
@@ -481,13 +460,13 @@ describe("SimPhanToe", function () {
       // Player 1 fills first row: (0,0), (1,0), (2,0)
       // Player 2 plays defensively, NOT completing any row: (0,1), (1,2), (0,2)
       // This prevents P2 from winning while P1 completes first row
-      
+
       // Round 1: P1 at (0,0), P2 at (0,1)
       await submitAndFinalizeMoves(0, 0, 0, 1);
-      
+
       // Round 2: P1 at (1,0), P2 at (1,2)
       await submitAndFinalizeMoves(1, 0, 1, 2);
-      
+
       // Round 3: P1 at (2,0), P2 at (0,2) - P1 wins with first row
       // Player 1 submits move
       const encryptedMove1 = await fhevm
@@ -513,16 +492,12 @@ describe("SimPhanToe", function () {
 
       // Finalize moves
       const [move1Before] = await contract.getMoves(0);
-      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([
-        move1Before.isInvalid,
-      ]);
+      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([move1Before.isInvalid]);
       const isInvalid1 = clearValues1[move1Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player1.address, isInvalid1, proof1);
 
       const [, move2Before] = await contract.getMoves(0);
-      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([
-        move2Before.isInvalid,
-      ]);
+      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([move2Before.isInvalid]);
       const isInvalid2 = clearValues2[move2Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player2.address, isInvalid2, proof2);
 
@@ -581,16 +556,12 @@ describe("SimPhanToe", function () {
 
       // 5. Finalize moves
       const [move1Before] = await contract.getMoves(0);
-      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([
-        move1Before.isInvalid,
-      ]);
+      const { clearValues: clearValues1, decryptionProof: proof1 } = await fhevm.publicDecrypt([move1Before.isInvalid]);
       const isInvalid1 = clearValues1[move1Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player1.address, isInvalid1, proof1);
 
       const [, move2Before] = await contract.getMoves(0);
-      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([
-        move2Before.isInvalid,
-      ]);
+      const { clearValues: clearValues2, decryptionProof: proof2 } = await fhevm.publicDecrypt([move2Before.isInvalid]);
       const isInvalid2 = clearValues2[move2Before.isInvalid as `0x${string}`] as boolean;
       await contract.finalizeMove(0, signers.player2.address, isInvalid2, proof2);
 
@@ -610,4 +581,3 @@ describe("SimPhanToe", function () {
     });
   });
 });
-

@@ -15,7 +15,7 @@ contract SimTacToe {
         Cell[3][3] board;
         Winner winner;
     }
-    
+
     struct Move {
         bool isMade;
         uint8 x;
@@ -72,12 +72,8 @@ contract SimTacToe {
         require(!nextMoves[_gameId][msg.sender].isMade, "Move already made.");
         require(_x < 3 && _y < 3, "Invalid move.");
         require(game.board[_x][_y] == Cell.Empty, "Cell is not empty.");
-        
-        nextMoves[_gameId][msg.sender] = Move({
-            isMade: true,
-            x: _x,
-            y: _y
-        });
+
+        nextMoves[_gameId][msg.sender] = Move({isMade: true, x: _x, y: _y});
         emit MoveSubmitted(_gameId, msg.sender);
         if (nextMoves[_gameId][game.playerOne].isMade && nextMoves[_gameId][game.playerTwo].isMade) {
             processMoves(_gameId);
@@ -112,8 +108,12 @@ contract SimTacToe {
         if (winnerColumn == Winner.Draw) return Winner.Draw;
         Winner winnerDiagonal = whoWinsByDiagonal(_board);
 
-        bool playerOneWins = winnerRow == Winner.Player1 || winnerColumn == Winner.Player1 || winnerDiagonal == Winner.Player1;
-        bool playerTwoWins = winnerRow == Winner.Player2 || winnerColumn == Winner.Player2 || winnerDiagonal == Winner.Player2;
+        bool playerOneWins = winnerRow == Winner.Player1 ||
+            winnerColumn == Winner.Player1 ||
+            winnerDiagonal == Winner.Player1;
+        bool playerTwoWins = winnerRow == Winner.Player2 ||
+            winnerColumn == Winner.Player2 ||
+            winnerDiagonal == Winner.Player2;
         if (playerOneWins && playerTwoWins) return Winner.Draw;
         if (playerOneWins) return Winner.Player1;
         if (playerTwoWins) return Winner.Player2;
