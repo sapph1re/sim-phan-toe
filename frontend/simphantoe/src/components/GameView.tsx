@@ -28,7 +28,9 @@ export function GameView({ gameId, onBack }: GameViewProps) {
     addLocalMove,
     refetchGame,
     handleSubmitMove,
+    handleRetry,
     fheStatus,
+    canRetry,
     isEncrypting,
     isSubmitting,
     isDecryptingMove,
@@ -240,6 +242,8 @@ export function GameView({ gameId, onBack }: GameViewProps) {
             isEncrypting={isEncrypting}
             isDecrypting={isDecryptingMove || isDecryptingState}
             isSubmitting={isSubmitting || isFinalizing || isFinalizingState}
+            canRetry={canRetry}
+            onRetry={handleRetry}
           />
 
           {/* Move Status */}

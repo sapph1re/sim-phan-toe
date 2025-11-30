@@ -516,10 +516,12 @@ export function useGameFlow(gameId: bigint | undefined) {
   const { finalizeGameState, isPending: isFinalizingState, isDecrypting: isDecryptingState } = useFinalizeGameState();
   const { lastEvent, clearEvent } = useGameEvents(gameId);
 
-  const [fheStatus, setFheStatus] = useState<{ type: string; message: string } | null>(null);
+  const [fheStatus, setFheStatus] = useState<{ type: string; message: string; errorDetails?: string } | null>(null);
   const [showCollision, setShowCollision] = useState(false);
   const [showGameOver, setShowGameOver] = useState(false);
   const [lastWinner, setLastWinner] = useState<Winner>(Winner.None);
+  const [canRetry, setCanRetry] = useState(false);
+  const [pendingRetryAction, setPendingRetryAction] = useState<(() => Promise<void>) | null>(null);
 
   // Track if we need to auto-finalize
   const needsFinalizeMoveRef = useRef(false);
@@ -551,6 +553,42 @@ export function useGameFlow(gameId: bigint | undefined) {
     }
   }, [gameId, gameState, submitMove]);
 
+  // Detect stuck state on load (move submitted but not finalized)
+  const stuckStateCheckedRef = useRef(false);
+  useEffect(() => {
+    // Only check once per game load, and only if we're not already in a pending operation
+    if (stuckStateCheckedRef.current) return;
+    if (gameId === undefined || !gameState.playerAddress || !gameState.myMove) return;
+    if (isEncrypting || isSubmitting || isFinalizing || isDecryptingMove) return;
+
+    const isStuck =
+      gameState.myMoveSubmitted &&
+      !gameState.myMoveMade &&
+      gameState.myMove.isInvalid &&
+      gameState.myMove.isInvalid !== "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+    if (isStuck) {
+      stuckStateCheckedRef.current = true;
+      console.log("Detected stuck state: move submitted but not finalized");
+      setFheStatus({
+        type: "error",
+        message: "Move validation incomplete",
+        errorDetails: "Your move was submitted but validation failed. Click retry to complete.",
+      });
+      setCanRetry(true);
+      setPendingRetryAction(() => async () => {
+        needsFinalizeMoveRef.current = true;
+        stuckStateCheckedRef.current = false; // Allow re-check after retry
+        gameState.refetchMoves();
+      });
+    }
+  }, [gameId, gameState, isEncrypting, isSubmitting, isFinalizing, isDecryptingMove]);
+
+  // Reset stuck state check when game changes
+  useEffect(() => {
+    stuckStateCheckedRef.current = false;
+  }, [gameId]);
+
   // Auto-finalize move when submitted
   useEffect(() => {
     async function autoFinalizeMove() {
@@ -566,6 +604,7 @@ export function useGameFlow(gameId: bigint | undefined) {
 
       try {
         setFheStatus({ type: "decrypt", message: "Validating move..." });
+        setCanRetry(false);
         const { isInvalid } = await finalizeMove(gameId, gameState.playerAddress, isInvalidHandle);
 
         if (isInvalid) {
@@ -576,12 +615,57 @@ export function useGameFlow(gameId: bigint | undefined) {
         }
       } catch (error) {
         console.error("Failed to finalize move:", error);
-        setFheStatus(null);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        setFheStatus({
+          type: "error",
+          message: "Failed to validate move",
+          errorDetails: errorMessage.includes("500") ? "Zama relayer service error. Please try again." : errorMessage,
+        });
+        setCanRetry(true);
+        // Store retry action
+        setPendingRetryAction(() => async () => {
+          needsFinalizeMoveRef.current = true;
+          // Trigger re-run of the effect
+          gameState.refetchMoves();
+        });
       }
     }
 
     autoFinalizeMove();
   }, [gameId, gameState, finalizeMove]);
+
+  // Detect stuck game state (both moves made but result not decrypted)
+  const stuckGameCheckedRef = useRef(false);
+  useEffect(() => {
+    if (stuckGameCheckedRef.current) return;
+    if (gameId === undefined || !gameState.game) return;
+    if (isDecryptingState || isFinalizingState) return;
+    if (!gameState.myMoveMade || !gameState.opponentMoveMade) return;
+    if (gameState.game.isFinished) return;
+
+    const winnerHandle = gameState.game.winner;
+    if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") return;
+
+    // Both moves made, game not finished, winner handle exists = stuck
+    stuckGameCheckedRef.current = true;
+    console.log("Detected stuck game state: both moves made but result not decrypted");
+    setFheStatus({
+      type: "error",
+      message: "Game result pending",
+      errorDetails: "Both moves were validated but result decryption failed. Click retry to complete.",
+    });
+    setCanRetry(true);
+    setPendingRetryAction(() => async () => {
+      needsFinalizeGameRef.current = false;
+      stuckGameCheckedRef.current = false;
+      gameState.refetchGame();
+    });
+  }, [gameId, gameState, isDecryptingState, isFinalizingState]);
+
+  // Reset stuck game check when game changes
+  useEffect(() => {
+    stuckGameCheckedRef.current = false;
+  }, [gameId]);
 
   // Auto-finalize game state when moves are processed
   useEffect(() => {
@@ -618,8 +702,17 @@ export function useGameFlow(gameId: bigint | undefined) {
         needsFinalizeGameRef.current = false;
       } catch (error) {
         console.error("Failed to finalize game state:", error);
-        setFheStatus(null);
-        needsFinalizeGameRef.current = false;
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        setFheStatus({
+          type: "error",
+          message: "Failed to decrypt result",
+          errorDetails: errorMessage.includes("500") ? "Zama relayer service error. Please try again." : errorMessage,
+        });
+        setCanRetry(true);
+        setPendingRetryAction(() => async () => {
+          needsFinalizeGameRef.current = false;
+          gameState.refetchGame();
+        });
       }
     }
 
@@ -650,14 +743,30 @@ export function useGameFlow(gameId: bigint | undefined) {
     clearEvent();
   }, [lastEvent, clearEvent, gameState]);
 
+  // Handle retry for failed FHE operations
+  const handleRetry = useCallback(async () => {
+    if (pendingRetryAction) {
+      setFheStatus(null);
+      setCanRetry(false);
+      try {
+        await pendingRetryAction();
+      } catch (error) {
+        console.error("Retry failed:", error);
+      }
+      setPendingRetryAction(null);
+    }
+  }, [pendingRetryAction]);
+
   return {
     ...gameState,
 
     // Actions
     handleSubmitMove,
+    handleRetry,
 
     // FHE status
     fheStatus,
+    canRetry,
     isEncrypting,
     isSubmitting,
     isDecryptingMove,
