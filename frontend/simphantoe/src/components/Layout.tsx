@@ -29,14 +29,19 @@ export function Layout() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyber-purple to-cyber-pink flex items-center justify-center relative">
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-                <line x1="15" y1="3" x2="15" y2="21" />
-                <line x1="3" y1="9" x2="21" y2="9" />
-                <line x1="3" y1="15" x2="21" y2="15" />
+              <svg className="w-7 h-7" viewBox="0 0 100 100" fill="none">
+                {/* Ghost body */}
+                <path d="M15 40 C15 20, 30 5, 50 5 C70 5, 85 20, 85 40 L85 85 Q77.5 75, 70 85 Q62.5 95, 55 85 Q50 78, 45 85 Q37.5 95, 30 85 Q22.5 75, 15 85 Z" 
+                      stroke="currentColor" strokeWidth="5" strokeLinejoin="round"/>
+                {/* X eye */}
+                <line x1="28" y1="27" x2="42" y2="41" stroke="currentColor" strokeWidth="5" strokeLinecap="round"/>
+                <line x1="42" y1="27" x2="28" y2="41" stroke="currentColor" strokeWidth="5" strokeLinecap="round"/>
+                {/* O eye */}
+                <circle cx="65" cy="34" r="9" fill="none" stroke="currentColor" strokeWidth="5"/>
+                {/* Mouth */}
+                <path d="M40 64 Q50 65, 60 64" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round"/>
               </svg>
-              {/* Ghost overlay */}
+              {/* Ghost glow */}
               <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-white/20 to-transparent opacity-50" />
             </div>
             <div>
@@ -140,18 +145,23 @@ function WelcomeScreen() {
       <div className="glass p-8 md:p-12 max-w-xl animate-fade-in">
         <div className="w-24 h-24 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-cyber-purple to-cyber-pink p-[2px] relative">
           <div className="w-full h-full rounded-2xl bg-cyber-darker flex items-center justify-center">
-            <svg
-              className="w-12 h-12 text-cyber-purple"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-              <line x1="15" y1="3" x2="15" y2="21" />
-              <line x1="3" y1="9" x2="21" y2="9" />
-              <line x1="3" y1="15" x2="21" y2="15" />
+            <svg className="w-14 h-14" viewBox="0 0 100 100" fill="none">
+              <defs>
+                <linearGradient id="ghostGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#a855f7"/>
+                  <stop offset="100%" stopColor="#ec4899"/>
+                </linearGradient>
+              </defs>
+              {/* Ghost body */}
+              <path d="M15 40 C15 20, 30 5, 50 5 C70 5, 85 20, 85 40 L85 85 Q77.5 75, 70 85 Q62.5 95, 55 85 Q50 78, 45 85 Q37.5 95, 30 85 Q22.5 75, 15 85 Z" 
+                    stroke="url(#ghostGrad)" strokeWidth="5" strokeLinejoin="round"/>
+              {/* X eye */}
+              <line x1="28" y1="27" x2="42" y2="41" stroke="url(#ghostGrad)" strokeWidth="5" strokeLinecap="round"/>
+              <line x1="42" y1="27" x2="28" y2="41" stroke="url(#ghostGrad)" strokeWidth="5" strokeLinecap="round"/>
+              {/* O eye */}
+              <circle cx="65" cy="34" r="9" fill="none" stroke="url(#ghostGrad)" strokeWidth="5"/>
+              {/* Mouth */}
+              <path d="M40 64 Q50 65, 60 64" fill="none" stroke="#d980ce" strokeWidth="5" strokeLinecap="round"/>
             </svg>
           </div>
           {/* Ghost effect */}
