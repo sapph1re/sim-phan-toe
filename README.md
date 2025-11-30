@@ -9,6 +9,8 @@ moves are encrypted and hidden.
 
 https://simphantoe.netlify.app/
 
+Deployed contract address in Sepolia: 0xda70dc4AA88DEcD0edE470c3481b67D0D8c0B03F
+
 ## Game Rules
 
 1. **Simultaneous Moves**: Both players select their cell at the same time. Your opponent can't see your choice!
