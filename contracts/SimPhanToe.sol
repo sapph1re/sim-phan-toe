@@ -99,6 +99,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         Game memory game = games[_gameId];
         require(game.player1 != address(0), "Game not found.");
         require(game.player2 == address(0), "Game is already full.");
+        require(msg.sender != game.player1, "Cannot join your own game.");
         game.player2 = msg.sender;
         games[_gameId] = game;
         emit PlayerJoined(_gameId, msg.sender);
@@ -190,8 +191,9 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @param _decryptionProof KMS signature proving correct decryption
     /// @dev Must be called after processing the moves and decrypting the winner value and the collision flag
     function finalizeGameState(uint256 _gameId, uint8 _winner, bool _collision, bytes memory _decryptionProof) external {
-        // verify decryption of the winner value and the collision flag
         Game memory game = games[_gameId];
+        require(!game.isFinished, "Game already finished.");
+        // verify decryption of the winner value and the collision flag
         bytes32[] memory ciphertextHandles = new bytes32[](2);
         ciphertextHandles[0] = FHE.toBytes32(game.winner);
         ciphertextHandles[1] = FHE.toBytes32(game.collision);
@@ -261,6 +263,27 @@ contract SimPhanToe is ZamaEthereumConfig {
             }
         }
         return playerGames;
+    }
+
+    /// @notice Get the move status for both players
+    /// @param _gameId The game ID
+    /// @return move1 Player 1's move
+    /// @return move2 Player 2's move
+    function getMoves(uint256 _gameId) external view returns (Move memory move1, Move memory move2) {
+        Game memory game = games[_gameId];
+        return (nextMoves[_gameId][game.player1], nextMoves[_gameId][game.player2]);
+    }
+
+    /// @notice Check if a player can submit a move
+    /// @param _gameId The game ID
+    /// @param _player The player address
+    /// @return canSubmit Whether the player can submit a move now
+    function canSubmitMove(uint256 _gameId, address _player) external view returns (bool canSubmit) {
+        Game memory game = games[_gameId];
+        if (game.player2 == address(0)) return false;  // waiting for player 2
+        if (game.isFinished) return false;
+        if (_player != game.player1 && _player != game.player2) return false;
+        return !nextMoves[_gameId][_player].isSubmitted;
     }
 
     /// @notice When both moves are submitted, process them and update the game state
