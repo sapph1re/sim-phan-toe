@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { useAccount, useChainId } from "wagmi";
-// Import from web module (self-contained, includes WASM)
+// Import from bundle - uses window.relayerSDK set up by UMD script in index.html
 // See: https://docs.zama.org/protocol/relayer-sdk-guides/development-guide/web-applications
-import { initSDK, createInstance, SepoliaConfig } from "@zama-fhe/relayer-sdk/web";
+import { initSDK, createInstance, SepoliaConfig } from "@zama-fhe/relayer-sdk/bundle";
 
 // Sepolia chain ID
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -63,7 +63,8 @@ export function FHEProvider({ children }: { children: ReactNode }) {
 
     async function loadSDK() {
       try {
-        await initSDK();
+        // Disable threading to avoid SharedArrayBuffer issues
+        await initSDK({ thread: 0 });
         if (mounted) {
           setSdkLoaded(true);
           console.log("FHE SDK WASM loaded successfully");

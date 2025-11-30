@@ -1,13 +1,13 @@
-import { useState, useCallback } from 'react'
-import { GameBoard } from './GameBoard'
-import { MoveIndicator, CollisionNotification, GameOverNotification } from './MoveIndicator'
-import { FHEStatus } from './FHEStatus'
-import { useGameFlow, useStartGame } from '../hooks/useSimPhanToe'
-import { Winner, GamePhase } from '../lib/contracts'
+import { useState, useCallback } from "react";
+import { GameBoard } from "./GameBoard";
+import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
+import { FHEStatus } from "./FHEStatus";
+import { useGameFlow, useStartGame } from "../hooks/useSimPhanToe";
+import { Winner, GamePhase } from "../lib/contracts";
 
 interface GameViewProps {
-  gameId: bigint
-  onBack: () => void
+  gameId: bigint;
+  onBack: () => void;
 }
 
 export function GameView({ gameId, onBack }: GameViewProps) {
@@ -40,41 +40,51 @@ export function GameView({ gameId, onBack }: GameViewProps) {
     showGameOver,
     setShowGameOver,
     lastWinner,
-  } = useGameFlow(gameId)
+  } = useGameFlow(gameId);
 
-  const { startGame } = useStartGame()
-  const [collisionCell, setCollisionCell] = useState<{ x: number; y: number } | null>(null)
+  const { startGame } = useStartGame();
+  const [collisionCell, setCollisionCell] = useState<{ x: number; y: number } | null>(null);
 
-  const handleCellClick = useCallback((x: number, y: number) => {
-    if (!canSubmitMove || myMoveSubmitted) return
-    addLocalMove(x, y)
-  }, [canSubmitMove, myMoveSubmitted, addLocalMove])
+  const handleCellClick = useCallback(
+    (x: number, y: number) => {
+      if (!canSubmitMove || myMoveSubmitted) return;
+      addLocalMove(x, y);
+    },
+    [canSubmitMove, myMoveSubmitted, addLocalMove],
+  );
 
   const handleSubmit = async () => {
-    if (!currentRoundMove || myMoveSubmitted) return
-    try {
-      await handleSubmitMove()
-    } catch (error) {
-      console.error('Failed to submit move:', error)
+    console.log("handleSubmit called", { currentRoundMove, myMoveSubmitted, canSubmitMove });
+    if (!currentRoundMove || myMoveSubmitted) {
+      console.log("handleSubmit early return - no move or already submitted");
+      return;
     }
-  }
+    try {
+      console.log("Calling handleSubmitMove...");
+      await handleSubmitMove();
+      console.log("handleSubmitMove completed");
+    } catch (error) {
+      console.error("Failed to submit move:", error);
+    }
+  };
 
   const handleNewGame = async () => {
     try {
-      await startGame()
-      onBack()
+      await startGame();
+      onBack();
     } catch (error) {
-      console.error('Failed to start new game:', error)
+      console.error("Failed to start new game:", error);
     }
-  }
+  };
 
   const handleDismissCollision = () => {
-    setShowCollision(false)
-    setCollisionCell(null)
-  }
+    setShowCollision(false);
+    setCollisionCell(null);
+  };
 
   // Determine if any FHE operation is in progress
-  const isFHEOperating = isEncrypting || isSubmitting || isDecryptingMove || isFinalizing || isDecryptingState || isFinalizingState
+  const isFHEOperating =
+    isEncrypting || isSubmitting || isDecryptingMove || isFinalizing || isDecryptingState || isFinalizingState;
 
   if (isLoading) {
     return (
@@ -84,7 +94,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
           <p className="text-gray-500">Loading phantom game...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!game) {
@@ -92,7 +102,13 @@ export function GameView({ gameId, onBack }: GameViewProps) {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="glass p-8 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-500/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className="w-8 h-8 text-gray-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <path d="M12 8v4m0 4h.01" />
             </svg>
@@ -104,7 +120,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   if (!isPlayer) {
@@ -116,32 +132,24 @@ export function GameView({ gameId, onBack }: GameViewProps) {
           </div>
           <h2 className="font-display text-2xl font-bold mb-4">Spectator Mode</h2>
           <p className="text-gray-500 mb-6">
-            You are not a player in this phantom game. 
-            The board is encrypted — there's nothing to see!
+            You are not a player in this phantom game. The board is encrypted — there's nothing to see!
           </p>
           <button onClick={onBack} className="btn-primary">
             Back to Lobby
           </button>
         </div>
       </div>
-    )
+    );
   }
 
-  const isGameOver = game.isFinished
-  const winnerType = lastWinner === Winner.Player1 
-    ? 'player1' 
-    : lastWinner === Winner.Player2 
-      ? 'player2' 
-      : 'draw'
+  const isGameOver = game.isFinished;
+  const winnerType = lastWinner === Winner.Player1 ? "player1" : lastWinner === Winner.Player2 ? "player2" : "draw";
 
   return (
     <div className="animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <button 
-          onClick={onBack}
-          className="flex items-center gap-2 text-gray-500 hover:text-white transition-colors"
-        >
+        <button onClick={onBack} className="flex items-center gap-2 text-gray-500 hover:text-white transition-colors">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -149,11 +157,17 @@ export function GameView({ gameId, onBack }: GameViewProps) {
         </button>
         <div className="flex items-center gap-3">
           <div className="fhe-indicator">
-            <svg className={`w-3 h-3 ${isFHEOperating ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className={`w-3 h-3 ${isFHEOperating ? "animate-pulse" : ""}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            {isFHEOperating ? 'Processing...' : 'Encrypted'}
+            {isFHEOperating ? "Processing..." : "Encrypted"}
           </div>
           <div className="font-display text-xl">
             <span className="text-gray-500">Phantom</span>
@@ -174,7 +188,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
             collisionCell={collisionCell}
             isLoading={isFHEOperating}
           />
-          
+
           {/* Submit button */}
           {!waitingForOpponent && !isGameOver && (
             <div className="mt-6 w-full max-w-xs">
@@ -187,9 +201,13 @@ export function GameView({ gameId, onBack }: GameViewProps) {
                   <>
                     <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
                     </svg>
-                    {isEncrypting ? 'Encrypting...' : isSubmitting ? 'Submitting...' : 'Processing...'}
+                    {isEncrypting ? "Encrypting..." : isSubmitting ? "Submitting..." : "Processing..."}
                   </>
                 ) : myMoveSubmitted ? (
                   <>
@@ -207,7 +225,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
                     Encrypt & Submit ({currentRoundMove.x}, {currentRoundMove.y})
                   </>
                 ) : (
-                  'Select a Cell'
+                  "Select a Cell"
                 )}
               </button>
             </div>
@@ -217,7 +235,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
         {/* Game Info Panel */}
         <div className="space-y-6">
           {/* FHE Status */}
-          <FHEStatus 
+          <FHEStatus
             status={fheStatus}
             isEncrypting={isEncrypting}
             isDecrypting={isDecryptingMove || isDecryptingState}
@@ -250,24 +268,18 @@ export function GameView({ gameId, onBack }: GameViewProps) {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Your Symbol</span>
-                <span className={`font-bold ${isPlayer1 ? 'text-cyber-purple' : 'text-cyber-cyan'}`}>
-                  {isPlayer1 ? '✕ (Player 1)' : '○ (Player 2)'}
+                <span className={`font-bold ${isPlayer1 ? "text-cyber-purple" : "text-cyber-cyan"}`}>
+                  {isPlayer1 ? "✕ (Player 1)" : "○ (Player 2)"}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Game Status</span>
-                <span className={`font-semibold ${
-                  isGameOver 
-                    ? 'text-gray-400' 
-                    : waitingForOpponent 
-                      ? 'text-yellow-500' 
-                      : 'text-green-500'
-                }`}>
-                  {isGameOver 
-                    ? 'Finished' 
-                    : waitingForOpponent 
-                      ? 'Waiting for Player 2' 
-                      : 'In Progress'}
+                <span
+                  className={`font-semibold ${
+                    isGameOver ? "text-gray-400" : waitingForOpponent ? "text-yellow-500" : "text-green-500"
+                  }`}
+                >
+                  {isGameOver ? "Finished" : waitingForOpponent ? "Waiting for Player 2" : "In Progress"}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -296,17 +308,22 @@ export function GameView({ gameId, onBack }: GameViewProps) {
                   ✕
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">Player 1 {isPlayer1 && '(You)'}</p>
+                  <p className="text-xs text-gray-500">Player 1 {isPlayer1 && "(You)"}</p>
                   <p className="font-mono text-sm truncate">{game.player1}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-cyber-cyan/20 flex items-center justify-center text-cyber-cyan font-bold relative">
-                  ○
-                  {/* Lock overlay for opponent */}
+                  ○{/* Lock overlay for opponent */}
                   {!isPlayer1 || waitingForOpponent ? null : (
                     <div className="absolute inset-0 flex items-center justify-center bg-cyber-darker/50 rounded-lg">
-                      <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        className="w-4 h-4 text-gray-500"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
@@ -314,10 +331,8 @@ export function GameView({ gameId, onBack }: GameViewProps) {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">Player 2 {!isPlayer1 && isPlayer && '(You)'}</p>
-                  <p className="font-mono text-sm truncate">
-                    {waitingForOpponent ? 'Waiting...' : game.player2}
-                  </p>
+                  <p className="text-xs text-gray-500">Player 2 {!isPlayer1 && isPlayer && "(You)"}</p>
+                  <p className="font-mono text-sm truncate">{waitingForOpponent ? "Waiting..." : game.player2}</p>
                 </div>
               </div>
             </div>
@@ -327,8 +342,8 @@ export function GameView({ gameId, onBack }: GameViewProps) {
           {!isGameOver && !waitingForOpponent && (
             <div className="glass-darker p-4">
               <p className="text-xs text-gray-500">
-                👻 <strong>Phantom Tip:</strong> You can only see your own moves. 
-                The opponent's board is completely hidden — use strategy and intuition!
+                👻 <strong>Phantom Tip:</strong> You can only see your own moves. The opponent's board is completely
+                hidden — use strategy and intuition!
               </p>
             </div>
           )}
@@ -336,10 +351,8 @@ export function GameView({ gameId, onBack }: GameViewProps) {
       </div>
 
       {/* Overlays */}
-      {showCollision && (
-        <CollisionNotification onDismiss={handleDismissCollision} />
-      )}
-      
+      {showCollision && <CollisionNotification onDismiss={handleDismissCollision} />}
+
       {showGameOver && isGameOver && (
         <GameOverNotification
           winner={winnerType}
@@ -349,6 +362,5 @@ export function GameView({ gameId, onBack }: GameViewProps) {
         />
       )}
     </div>
-  )
+  );
 }
-
