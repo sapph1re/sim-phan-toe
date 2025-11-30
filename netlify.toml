@@ -2,18 +2,18 @@
 # https://docs.netlify.com/configure-builds/file-based-configuration/
 
 [build]
-  # Build command
-  command = "npm install && npm run build"
-  # Output directory (Vite default)
-  publish = "dist"
+  # Build command - uses npm workspaces from repo root
+  command = "npm install && npm run build:simphantoe"
+  # Output directory (absolute path from repo root)
+  publish = "frontend/simphantoe/dist"
 
 # Production context
 [context.production]
-  environment = { NODE_VERSION = "20" }
+  environment = { NODE_VERSION = "22" }
 
 # Preview/branch deploys
 [context.deploy-preview]
-  environment = { NODE_VERSION = "20" }
+  environment = { NODE_VERSION = "22" }
 
 # Headers configuration
 # CRITICAL: These headers are required for SharedArrayBuffer support
