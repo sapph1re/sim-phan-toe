@@ -535,6 +535,9 @@ export function useGameFlow(gameId: bigint | undefined) {
   
   // Track handles we've already processed to avoid using stale handles
   const processedHandlesRef = useRef<Set<string>>(new Set());
+  
+  // Track when MovesProcessed event fires - this is when we need to finalize game state
+  const [movesProcessedPending, setMovesProcessedPending] = useState(false);
 
   // Handle submitting a move
   const handleSubmitMove = useCallback(async () => {
@@ -655,33 +658,49 @@ export function useGameFlow(gameId: bigint | undefined) {
     autoFinalizeMove();
   }, [gameId, gameState, finalizeMove]);
 
-  // Detect stuck game state (both moves made but result not decrypted)
+  // Detect stuck game state (moves processed but result not decrypted)
+  // This can happen if processMoves ran but finalizeGameState failed or wasn't triggered
   const stuckGameCheckedRef = useRef(false);
   useEffect(() => {
     if (stuckGameCheckedRef.current) return;
     if (gameId === undefined || !gameState.game) return;
     if (isDecryptingState || isFinalizingState) return;
-    if (!gameState.myMoveMade || !gameState.opponentMoveMade) return;
     if (gameState.game.isFinished) return;
+    if (movesProcessedPending) return; // Don't show stuck if we're about to process
 
     const winnerHandle = gameState.game.winner;
     if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") return;
+    
+    // Check if we've already processed this handle
+    const collisionHandle = gameState.game.collision;
+    const handleKey = `${winnerHandle}-${collisionHandle}`;
+    if (processedHandlesRef.current.has(handleKey)) return;
 
-    // Both moves made, game not finished, winner handle exists = stuck
-    stuckGameCheckedRef.current = true;
-    console.log("Detected stuck game state: both moves made but result not decrypted");
-    setFheStatus({
-      type: "error",
-      message: "Game result pending",
-      errorDetails: "Both moves were validated but result decryption failed. Click retry to complete.",
-    });
-    setCanRetry(true);
-    setPendingRetryAction(() => async () => {
-      needsFinalizeGameRef.current = false;
-      stuckGameCheckedRef.current = false;
-      gameState.refetchGame();
-    });
-  }, [gameId, gameState, isDecryptingState, isFinalizingState]);
+    // Winner handle exists but not processed yet - might be stuck
+    // Wait a short time before showing the stuck message (to allow normal processing)
+    const timeoutId = setTimeout(() => {
+      // Re-check conditions after timeout
+      if (stuckGameCheckedRef.current) return;
+      if (processedHandlesRef.current.has(handleKey)) return;
+      if (needsFinalizeGameRef.current) return;
+      
+      stuckGameCheckedRef.current = true;
+      console.log("Detected stuck game state: moves processed but result not decrypted");
+      setFheStatus({
+        type: "error",
+        message: "Game result pending",
+        errorDetails: "Moves were processed but result decryption failed. Click retry to complete.",
+      });
+      setCanRetry(true);
+      setPendingRetryAction(() => async () => {
+        needsFinalizeGameRef.current = false;
+        stuckGameCheckedRef.current = false;
+        setMovesProcessedPending(true); // Re-trigger finalization
+      });
+    }, 3000); // Wait 3 seconds before showing stuck state
+    
+    return () => clearTimeout(timeoutId);
+  }, [gameId, gameState, isDecryptingState, isFinalizingState, movesProcessedPending]);
 
   // Reset stuck game check and processed handles when game changes
   useEffect(() => {
@@ -689,39 +708,50 @@ export function useGameFlow(gameId: bigint | undefined) {
     processedHandlesRef.current.clear();
   }, [gameId]);
 
-  // Auto-finalize game state when moves are processed
+  // Auto-finalize game state when MovesProcessed event is received
   useEffect(() => {
     async function autoFinalizeGame() {
-      if (gameId === undefined || !gameState.game) return;
-      if (!gameState.myMoveMade || !gameState.opponentMoveMade) return;
-      if (gameState.game.isFinished) return;
+      // Only run when movesProcessedPending is set (triggered by MovesProcessed event)
+      if (!movesProcessedPending) return;
+      if (gameId === undefined) return;
       if (needsFinalizeGameRef.current) return;
 
-      // IMPORTANT: Refetch game state to ensure we have fresh handles
-      // The game state in gameState.game may be stale if processMoves just ran
-      const refetchResult = await gameState.refetchGame();
-      const freshGame = refetchResult.data as Game | undefined;
-      
-      if (!freshGame) {
-        console.error("Failed to refetch game state");
-        return;
-      }
-
-      const winnerHandle = freshGame.winner;
-      const collisionHandle = freshGame.collision;
-
-      if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000")
-        return;
-      
-      // Check if we've already processed these exact handles to avoid double-processing
-      const handleKey = `${winnerHandle}-${collisionHandle}`;
-      if (processedHandlesRef.current.has(handleKey)) {
-        return;
-      }
-
+      // Clear the pending flag immediately to prevent re-entry
+      setMovesProcessedPending(false);
       needsFinalizeGameRef.current = true;
 
       try {
+        // Refetch game state to ensure we have fresh handles
+        const refetchResult = await gameState.refetchGame();
+        const freshGame = refetchResult.data as Game | undefined;
+        
+        if (!freshGame) {
+          console.error("Failed to refetch game state");
+          needsFinalizeGameRef.current = false;
+          return;
+        }
+
+        // Don't process if game is already finished
+        if (freshGame.isFinished) {
+          needsFinalizeGameRef.current = false;
+          return;
+        }
+
+        const winnerHandle = freshGame.winner;
+        const collisionHandle = freshGame.collision;
+
+        if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") {
+          needsFinalizeGameRef.current = false;
+          return;
+        }
+        
+        // Check if we've already processed these exact handles to avoid double-processing
+        const handleKey = `${winnerHandle}-${collisionHandle}`;
+        if (processedHandlesRef.current.has(handleKey)) {
+          needsFinalizeGameRef.current = false;
+          return;
+        }
+
         setFheStatus({ type: "decrypt", message: "Decrypting result..." });
         const { winner, collision } = await finalizeGameState(gameId, winnerHandle, collisionHandle);
         
@@ -743,6 +773,7 @@ export function useGameFlow(gameId: bigint | undefined) {
         needsFinalizeGameRef.current = false;
       } catch (error) {
         console.error("Failed to finalize game state:", error);
+        needsFinalizeGameRef.current = false;
 
         // Handle RelayerError with detailed information
         if (error instanceof RelayerError) {
@@ -763,20 +794,26 @@ export function useGameFlow(gameId: bigint | undefined) {
         }
         setCanRetry(true);
         setPendingRetryAction(() => async () => {
-          needsFinalizeGameRef.current = false;
-          gameState.refetchGame();
+          // Re-trigger by setting the pending flag
+          setMovesProcessedPending(true);
         });
       }
     }
 
     autoFinalizeGame();
-  }, [gameId, gameState, finalizeGameState]);
+  }, [gameId, movesProcessedPending, gameState, finalizeGameState]);
 
   // Handle events
   useEffect(() => {
     if (!lastEvent) return;
 
     switch (lastEvent.type) {
+      case "processed":
+        // Both moves have been processed by the contract
+        // Trigger game finalization to decrypt winner/collision
+        console.log("MovesProcessed event received - triggering game finalization");
+        setMovesProcessedPending(true);
+        break;
       case "collision":
         // Collision detected via event - ensure UI reflects this
         setShowCollision(true);
