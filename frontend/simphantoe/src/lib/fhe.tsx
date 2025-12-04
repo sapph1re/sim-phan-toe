@@ -19,6 +19,7 @@ export class RelayerError extends Error {
   public readonly statusText?: string;
   public readonly relayerMessage?: string;
   public readonly isRelayerError: boolean = true;
+  public readonly originalError?: unknown;
 
   constructor(
     message: string,
@@ -29,11 +30,12 @@ export class RelayerError extends Error {
       cause?: unknown;
     },
   ) {
-    super(message, { cause: options?.cause });
+    super(message);
     this.name = "RelayerError";
     this.statusCode = options?.statusCode;
     this.statusText = options?.statusText;
     this.relayerMessage = options?.relayerMessage;
+    this.originalError = options?.cause;
   }
 
   // Format error for display
@@ -89,7 +91,7 @@ export function parseRelayerError(error: unknown): RelayerError {
     }
 
     // Check if error has additional properties (some SDKs attach these)
-    const anyError = error as Record<string, unknown>;
+    const anyError = error as unknown as Record<string, unknown>;
 
     // Check for response object (common in fetch-based errors)
     if (anyError.response && typeof anyError.response === "object") {
@@ -122,9 +124,9 @@ export function parseRelayerError(error: unknown): RelayerError {
       if (typeof data.message === "string") relayerMessage = data.message;
     }
 
-    // Look for nested cause
-    if (error.cause) {
-      const causeError = parseRelayerError(error.cause);
+    // Look for nested cause (ES2022+ feature, access via anyError)
+    if (anyError.cause) {
+      const causeError = parseRelayerError(anyError.cause);
       if (!statusCode && causeError.statusCode) statusCode = causeError.statusCode;
       if (!relayerMessage && causeError.relayerMessage) relayerMessage = causeError.relayerMessage;
     }
@@ -507,5 +509,5 @@ export function usePublicDecrypt() {
   };
 }
 
-// Export the context and error types for direct use if needed
-export { FHEContext, RelayerError, parseRelayerError };
+// Export the context for direct use if needed
+export { FHEContext };
