@@ -532,6 +532,9 @@ export function useGameFlow(gameId: bigint | undefined) {
   // Track if we need to auto-finalize
   const needsFinalizeMoveRef = useRef(false);
   const needsFinalizeGameRef = useRef(false);
+  
+  // Track handles we've already processed to avoid using stale handles
+  const processedHandlesRef = useRef<Set<string>>(new Set());
 
   // Handle submitting a move
   const handleSubmitMove = useCallback(async () => {
@@ -680,9 +683,10 @@ export function useGameFlow(gameId: bigint | undefined) {
     });
   }, [gameId, gameState, isDecryptingState, isFinalizingState]);
 
-  // Reset stuck game check when game changes
+  // Reset stuck game check and processed handles when game changes
   useEffect(() => {
     stuckGameCheckedRef.current = false;
+    processedHandlesRef.current.clear();
   }, [gameId]);
 
   // Auto-finalize game state when moves are processed
@@ -691,19 +695,38 @@ export function useGameFlow(gameId: bigint | undefined) {
       if (gameId === undefined || !gameState.game) return;
       if (!gameState.myMoveMade || !gameState.opponentMoveMade) return;
       if (gameState.game.isFinished) return;
+      if (needsFinalizeGameRef.current) return;
 
-      const winnerHandle = gameState.game.winner;
-      const collisionHandle = gameState.game.collision;
+      // IMPORTANT: Refetch game state to ensure we have fresh handles
+      // The game state in gameState.game may be stale if processMoves just ran
+      const refetchResult = await gameState.refetchGame();
+      const freshGame = refetchResult.data as Game | undefined;
+      
+      if (!freshGame) {
+        console.error("Failed to refetch game state");
+        return;
+      }
+
+      const winnerHandle = freshGame.winner;
+      const collisionHandle = freshGame.collision;
 
       if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000")
         return;
-      if (needsFinalizeGameRef.current) return;
+      
+      // Check if we've already processed these exact handles to avoid double-processing
+      const handleKey = `${winnerHandle}-${collisionHandle}`;
+      if (processedHandlesRef.current.has(handleKey)) {
+        return;
+      }
 
       needsFinalizeGameRef.current = true;
 
       try {
         setFheStatus({ type: "decrypt", message: "Decrypting result..." });
         const { winner, collision } = await finalizeGameState(gameId, winnerHandle, collisionHandle);
+        
+        // Mark these handles as processed
+        processedHandlesRef.current.add(handleKey);
 
         if (collision) {
           setShowCollision(true);
@@ -755,8 +778,12 @@ export function useGameFlow(gameId: bigint | undefined) {
 
     switch (lastEvent.type) {
       case "collision":
+        // Collision detected via event - ensure UI reflects this
         setShowCollision(true);
         gameState.clearCurrentRoundMove();
+        // Also set the FHE status to show collision message
+        // (this ensures correct feedback even if autoFinalizeGame had stale data)
+        setFheStatus({ type: "collision", message: "Moves collided!" });
         break;
       case "updated":
         const data = lastEvent.data as { winner: number };
