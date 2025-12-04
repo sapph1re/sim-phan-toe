@@ -13,6 +13,160 @@ export interface EncryptedInput {
   inputProof: `0x${string}`;
 }
 
+// Custom error class for Zama relayer errors with detailed information
+export class RelayerError extends Error {
+  public readonly statusCode?: number;
+  public readonly statusText?: string;
+  public readonly relayerMessage?: string;
+  public readonly isRelayerError: boolean = true;
+
+  constructor(
+    message: string,
+    options?: {
+      statusCode?: number;
+      statusText?: string;
+      relayerMessage?: string;
+      cause?: unknown;
+    },
+  ) {
+    super(message, { cause: options?.cause });
+    this.name = "RelayerError";
+    this.statusCode = options?.statusCode;
+    this.statusText = options?.statusText;
+    this.relayerMessage = options?.relayerMessage;
+  }
+
+  // Format error for display
+  getDisplayMessage(): string {
+    const parts: string[] = [];
+    if (this.statusCode) {
+      parts.push(`Status ${this.statusCode}${this.statusText ? ` (${this.statusText})` : ""}`);
+    }
+    if (this.relayerMessage) {
+      parts.push(this.relayerMessage);
+    }
+    if (parts.length === 0) {
+      parts.push(this.message);
+    }
+    return parts.join(": ");
+  }
+}
+
+// Helper to extract detailed error information from SDK errors
+export function parseRelayerError(error: unknown): RelayerError {
+  // Already a RelayerError
+  if (error instanceof RelayerError) {
+    return error;
+  }
+
+  // Extract information from various error formats
+  let statusCode: number | undefined;
+  let statusText: string | undefined;
+  let relayerMessage: string | undefined;
+  let originalMessage = "Unknown relayer error";
+
+  if (error instanceof Error) {
+    originalMessage = error.message;
+
+    // Try to extract status code from error message (e.g., "Request failed with status 500")
+    const statusMatch = originalMessage.match(/status\s*[:=]?\s*(\d{3})/i);
+    if (statusMatch) {
+      statusCode = parseInt(statusMatch[1], 10);
+    }
+
+    // Try to extract JSON message from error
+    // The SDK might include the response body in the error message
+    const jsonMatch = originalMessage.match(/\{[\s\S]*"message"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.message) {
+          relayerMessage = parsed.message;
+        }
+      } catch {
+        // Failed to parse JSON, continue with other extraction methods
+      }
+    }
+
+    // Check if error has additional properties (some SDKs attach these)
+    const anyError = error as Record<string, unknown>;
+
+    // Check for response object (common in fetch-based errors)
+    if (anyError.response && typeof anyError.response === "object") {
+      const response = anyError.response as Record<string, unknown>;
+      if (typeof response.status === "number") statusCode = response.status;
+      if (typeof response.statusText === "string") statusText = response.statusText;
+      if (typeof response.data === "object" && response.data) {
+        const data = response.data as Record<string, unknown>;
+        if (typeof data.message === "string") relayerMessage = data.message;
+      }
+    }
+
+    // Check for status directly on error (axios-style)
+    if (typeof anyError.status === "number") statusCode = anyError.status;
+    if (typeof anyError.statusCode === "number") statusCode = anyError.statusCode;
+    if (typeof anyError.statusText === "string") statusText = anyError.statusText;
+
+    // Check for body/data property
+    if (typeof anyError.body === "string") {
+      try {
+        const parsed = JSON.parse(anyError.body);
+        if (parsed.message) relayerMessage = parsed.message;
+      } catch {
+        // Not JSON, use as-is if short enough
+        if (anyError.body.length < 500) relayerMessage = anyError.body;
+      }
+    }
+    if (typeof anyError.data === "object" && anyError.data) {
+      const data = anyError.data as Record<string, unknown>;
+      if (typeof data.message === "string") relayerMessage = data.message;
+    }
+
+    // Look for nested cause
+    if (error.cause) {
+      const causeError = parseRelayerError(error.cause);
+      if (!statusCode && causeError.statusCode) statusCode = causeError.statusCode;
+      if (!relayerMessage && causeError.relayerMessage) relayerMessage = causeError.relayerMessage;
+    }
+  } else if (typeof error === "string") {
+    originalMessage = error;
+  }
+
+  // Create descriptive message based on status code
+  let displayMessage = "Zama relayer request failed";
+  if (statusCode) {
+    switch (statusCode) {
+      case 500:
+        displayMessage = "Zama relayer internal server error";
+        break;
+      case 520:
+        displayMessage = "Zama relayer unknown error (520)";
+        break;
+      case 502:
+        displayMessage = "Zama relayer bad gateway";
+        break;
+      case 503:
+        displayMessage = "Zama relayer service unavailable";
+        break;
+      case 504:
+        displayMessage = "Zama relayer gateway timeout";
+        break;
+      case 408:
+        displayMessage = "Zama relayer request timeout";
+        break;
+      default:
+        displayMessage = `Zama relayer error (${statusCode})`;
+    }
+  }
+
+  return new RelayerError(displayMessage, {
+    statusCode,
+    statusText,
+    relayerMessage,
+    cause: error,
+  });
+}
+
 // FHE Instance type from the SDK
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type FHEInstanceType = any; // The SDK doesn't export proper types yet
@@ -186,13 +340,21 @@ export function FHEProvider({ children }: { children: ReactNode }) {
         throw new Error("FHE SDK not initialized");
       }
 
-      // Request public decryption through the relayer
-      const result = await instance.publicDecrypt(handles);
+      try {
+        // Request public decryption through the relayer
+        const result = await instance.publicDecrypt(handles);
 
-      return {
-        clearValues: result.clearValues,
-        decryptionProof: result.decryptionProof as `0x${string}`,
-      };
+        return {
+          clearValues: result.clearValues,
+          decryptionProof: result.decryptionProof as `0x${string}`,
+        };
+      } catch (error) {
+        // Log the full error for debugging
+        console.error("Public decrypt relayer error:", error);
+
+        // Parse and re-throw as RelayerError with detailed information
+        throw parseRelayerError(error);
+      }
     },
     [instance, isSupported],
   );
@@ -267,7 +429,7 @@ export function useEncryptMove() {
 export function usePublicDecrypt() {
   const { publicDecrypt, isLoading: fheLoading, isInitialized, isSupported, error: fheError } = useFHE();
   const [isDecrypting, setIsDecrypting] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<Error | RelayerError | null>(null);
 
   const decrypt = useCallback(
     async (
@@ -292,8 +454,13 @@ export function usePublicDecrypt() {
         const result = await publicDecrypt(handles);
         return result;
       } catch (err) {
-        const error = err instanceof Error ? err : new Error("Decryption failed");
-        setError(error);
+        // Preserve RelayerError with all its details, otherwise wrap in generic error
+        if (err instanceof RelayerError) {
+          setError(err);
+        } else {
+          const error = err instanceof Error ? err : new Error("Decryption failed");
+          setError(error);
+        }
         return null;
       } finally {
         setIsDecrypting(false);
@@ -302,6 +469,33 @@ export function usePublicDecrypt() {
     [publicDecrypt, isInitialized, isSupported],
   );
 
+  // Helper to get relayer-specific error details
+  const getRelayerErrorDetails = useCallback((): {
+    isRelayerError: boolean;
+    statusCode?: number;
+    statusText?: string;
+    relayerMessage?: string;
+    displayMessage: string;
+  } | null => {
+    const currentError = error || fheError;
+    if (!currentError) return null;
+
+    if (currentError instanceof RelayerError) {
+      return {
+        isRelayerError: true,
+        statusCode: currentError.statusCode,
+        statusText: currentError.statusText,
+        relayerMessage: currentError.relayerMessage,
+        displayMessage: currentError.getDisplayMessage(),
+      };
+    }
+
+    return {
+      isRelayerError: false,
+      displayMessage: currentError.message,
+    };
+  }, [error, fheError]);
+
   return {
     decrypt,
     isDecrypting,
@@ -309,8 +503,9 @@ export function usePublicDecrypt() {
     isFHEReady: isInitialized && isSupported,
     isFHESupported: isSupported,
     error: error || fheError,
+    getRelayerErrorDetails,
   };
 }
 
-// Export the context for direct use if needed
-export { FHEContext };
+// Export the context and error types for direct use if needed
+export { FHEContext, RelayerError, parseRelayerError };

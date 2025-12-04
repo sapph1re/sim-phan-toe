@@ -3,6 +3,8 @@ interface FHEStatusProps {
     type: string;
     message: string;
     errorDetails?: string;
+    statusCode?: number;
+    relayerMessage?: string;
   } | null;
   isEncrypting?: boolean;
   isDecrypting?: boolean;
@@ -98,6 +100,17 @@ export function FHEStatus({
             message: status.message,
             errorDetails: status.errorDetails,
           };
+        case "relayer_error":
+          return {
+            icon: "relayer",
+            color: "orange-500",
+            bgColor: "from-orange-500/20 to-red-500/20",
+            message: status.message,
+            errorDetails: status.errorDetails,
+            statusCode: status.statusCode,
+            relayerMessage: status.relayerMessage,
+            isRelayerError: true,
+          };
         case "collision":
           return {
             icon: "collision",
@@ -122,6 +135,7 @@ export function FHEStatus({
 
   const isLoading = isEncrypting || isDecrypting || isSubmitting;
   const isError = status?.type === "error";
+  const isRelayerError = status?.type === "relayer_error";
 
   return (
     <div className={`glass p-4 bg-gradient-to-r ${config.bgColor} border-l-4 border-l-${config.color}`}>
@@ -202,6 +216,16 @@ export function FHEStatus({
             >
               <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" />
             </svg>
+          ) : config.icon === "relayer" ? (
+            <svg
+              className={`w-5 h-5 text-${config.color}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
           ) : (
             <svg
               className={`w-5 h-5 text-${config.color}`}
@@ -239,8 +263,39 @@ export function FHEStatus({
             </p>
           )}
 
-          {/* Error details */}
-          {isError && config.errorDetails && (
+          {/* Relayer error details - displayed prominently */}
+          {isRelayerError && (
+            <div className="mt-2 space-y-2">
+              {/* Status code badge */}
+              {"statusCode" in config && config.statusCode && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded bg-orange-500/20 border border-orange-500/40 text-orange-400 text-xs font-mono">
+                    HTTP {config.statusCode}
+                  </span>
+                  <span className="text-xs text-gray-500">Zama Relayer Error</span>
+                </div>
+              )}
+              {/* Relayer message - displayed in a scrollable box */}
+              {"relayerMessage" in config && config.relayerMessage && (
+                <div className="bg-gray-900/50 border border-gray-700/50 rounded-lg p-3 max-h-32 overflow-y-auto">
+                  <p className="text-xs text-orange-300/90 font-mono break-all whitespace-pre-wrap">
+                    {config.relayerMessage}
+                  </p>
+                </div>
+              )}
+              {/* Fallback to errorDetails if no relayer message */}
+              {!("relayerMessage" in config && config.relayerMessage) && config.errorDetails && (
+                <p className="text-xs text-orange-400/80 font-mono break-all">{config.errorDetails}</p>
+              )}
+              {/* Help text */}
+              <p className="text-xs text-gray-500 mt-1">
+                This is a Zama relayer infrastructure issue. Please wait a moment and try again.
+              </p>
+            </div>
+          )}
+
+          {/* Regular error details */}
+          {isError && !isRelayerError && config.errorDetails && (
             <p className="text-xs text-red-400/80 mt-1 font-mono break-all">{config.errorDetails}</p>
           )}
         </div>
@@ -257,10 +312,14 @@ export function FHEStatus({
                 />
               ))}
             </div>
-          ) : isError && canRetry && onRetry ? (
+          ) : (isError || isRelayerError) && canRetry && onRetry ? (
             <button
               onClick={onRetry}
-              className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 rounded-lg text-red-400 text-sm font-medium transition-colors flex items-center gap-1.5"
+              className={`px-3 py-1.5 ${
+                isRelayerError
+                  ? "bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/50 text-orange-400"
+                  : "bg-red-500/20 hover:bg-red-500/30 border-red-500/50 text-red-400"
+              } border rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5`}
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M1 4v6h6" />

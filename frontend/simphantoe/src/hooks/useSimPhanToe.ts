@@ -11,7 +11,7 @@ import {
   GamePhase,
   Winner,
 } from "../lib/contracts";
-import { useFHE, useEncryptMove, usePublicDecrypt } from "../lib/fhe";
+import { useFHE, useEncryptMove, usePublicDecrypt, RelayerError } from "../lib/fhe";
 
 // Hook to get the contract address with validation
 export function useContractAddress() {
@@ -516,7 +516,13 @@ export function useGameFlow(gameId: bigint | undefined) {
   const { finalizeGameState, isPending: isFinalizingState, isDecrypting: isDecryptingState } = useFinalizeGameState();
   const { lastEvent, clearEvent } = useGameEvents(gameId);
 
-  const [fheStatus, setFheStatus] = useState<{ type: string; message: string; errorDetails?: string } | null>(null);
+  const [fheStatus, setFheStatus] = useState<{
+    type: string;
+    message: string;
+    errorDetails?: string;
+    statusCode?: number;
+    relayerMessage?: string;
+  } | null>(null);
   const [showCollision, setShowCollision] = useState(false);
   const [showGameOver, setShowGameOver] = useState(false);
   const [lastWinner, setLastWinner] = useState<Winner>(Winner.None);
@@ -615,12 +621,24 @@ export function useGameFlow(gameId: bigint | undefined) {
         }
       } catch (error) {
         console.error("Failed to finalize move:", error);
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        setFheStatus({
-          type: "error",
-          message: "Failed to validate move",
-          errorDetails: errorMessage.includes("500") ? "Zama relayer service error. Please try again." : errorMessage,
-        });
+
+        // Handle RelayerError with detailed information
+        if (error instanceof RelayerError) {
+          setFheStatus({
+            type: "relayer_error",
+            message: error.message,
+            errorDetails: error.getDisplayMessage(),
+            statusCode: error.statusCode,
+            relayerMessage: error.relayerMessage,
+          });
+        } else {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          setFheStatus({
+            type: "error",
+            message: "Failed to validate move",
+            errorDetails: errorMessage,
+          });
+        }
         setCanRetry(true);
         // Store retry action
         setPendingRetryAction(() => async () => {
@@ -702,12 +720,24 @@ export function useGameFlow(gameId: bigint | undefined) {
         needsFinalizeGameRef.current = false;
       } catch (error) {
         console.error("Failed to finalize game state:", error);
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        setFheStatus({
-          type: "error",
-          message: "Failed to decrypt result",
-          errorDetails: errorMessage.includes("500") ? "Zama relayer service error. Please try again." : errorMessage,
-        });
+
+        // Handle RelayerError with detailed information
+        if (error instanceof RelayerError) {
+          setFheStatus({
+            type: "relayer_error",
+            message: error.message,
+            errorDetails: error.getDisplayMessage(),
+            statusCode: error.statusCode,
+            relayerMessage: error.relayerMessage,
+          });
+        } else {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          setFheStatus({
+            type: "error",
+            message: "Failed to decrypt result",
+            errorDetails: errorMessage,
+          });
+        }
         setCanRetry(true);
         setPendingRetryAction(() => async () => {
           needsFinalizeGameRef.current = false;
