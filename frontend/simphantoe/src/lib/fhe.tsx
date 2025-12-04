@@ -439,14 +439,16 @@ export function usePublicDecrypt() {
     ): Promise<{
       clearValues: Record<string, boolean | bigint>;
       decryptionProof: `0x${string}`;
-    } | null> => {
+    }> => {
       if (!isSupported) {
-        setError(new Error("FHE decryption requires Sepolia testnet"));
-        return null;
+        const err = new Error("FHE decryption requires Sepolia testnet");
+        setError(err);
+        throw err;
       }
       if (!isInitialized) {
-        setError(new Error("FHE SDK not yet initialized"));
-        return null;
+        const err = new Error("FHE SDK not yet initialized");
+        setError(err);
+        throw err;
       }
 
       setIsDecrypting(true);
@@ -457,13 +459,15 @@ export function usePublicDecrypt() {
         return result;
       } catch (err) {
         // Preserve RelayerError with all its details, otherwise wrap in generic error
+        let errorToThrow: Error | RelayerError;
         if (err instanceof RelayerError) {
-          setError(err);
+          errorToThrow = err;
         } else {
-          const error = err instanceof Error ? err : new Error("Decryption failed");
-          setError(error);
+          errorToThrow = err instanceof Error ? err : new Error("Decryption failed");
         }
-        return null;
+        setError(errorToThrow);
+        // Re-throw so callers can catch the detailed error
+        throw errorToThrow;
       } finally {
         setIsDecrypting(false);
       }
