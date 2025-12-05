@@ -56,15 +56,11 @@ export function GameView({ gameId, onBack }: GameViewProps) {
   );
 
   const handleSubmit = async () => {
-    console.log("handleSubmit called", { currentRoundMove, myMoveSubmitted, canSubmitMove });
     if (!currentRoundMove || myMoveSubmitted) {
-      console.log("handleSubmit early return - no move or already submitted");
       return;
     }
     try {
-      console.log("Calling handleSubmitMove...");
       await handleSubmitMove();
-      console.log("handleSubmitMove completed");
     } catch (error) {
       console.error("Failed to submit move:", error);
     }

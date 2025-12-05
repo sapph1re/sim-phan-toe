@@ -160,13 +160,10 @@ export function useSubmitMove() {
 
   const submitMove = useCallback(
     async (gameId: bigint, x: number, y: number) => {
-      console.log("useSubmitMove.submitMove called", { gameId: gameId.toString(), x, y, contractAddress });
       if (!contractAddress) throw new Error("Contract not configured");
 
       // Step 1: Encrypt the move coordinates
-      console.log("Step 1: Encrypting move...");
       const encrypted = await encrypt(contractAddress, x, y);
-      console.log("Encryption result:", encrypted);
       if (!encrypted) throw new Error("Failed to encrypt move");
 
       // Step 2: Submit the encrypted move to the contract
@@ -177,18 +174,12 @@ export function useSubmitMove() {
       const handle0Hex = handle0 instanceof Uint8Array ? toHex(handle0) : handle0;
       const handle1Hex = handle1 instanceof Uint8Array ? toHex(handle1) : handle1;
       const inputProofHex = inputProof instanceof Uint8Array ? toHex(inputProof) : inputProof;
-      console.log("Step 2: Submitting to contract...", {
-        handle0Hex,
-        handle1Hex,
-        inputProofHex,
-      });
       const result = await writeContractAsync({
         address: contractAddress,
         abi: SIMPHANTOE_ABI,
         functionName: "submitMove",
         args: [gameId, handle0Hex, handle1Hex, inputProofHex],
       });
-      console.log("Contract submission result:", result);
 
       queryClient.invalidateQueries({ queryKey: ["readContract"] });
       return result;
@@ -218,27 +209,21 @@ export function useFinalizeMove() {
       if (!contractAddress) throw new Error("Contract not configured");
 
       // Step 1: Decrypt the isInvalid flag
-      console.log("[finalizeMove] Step 1: Decrypting isInvalid handle...");
       const decrypted = await decrypt([isInvalidHandle]);
       if (!decrypted) throw new Error("Failed to decrypt move validity");
 
       const isInvalid = decrypted.clearValues[isInvalidHandle] as boolean;
-      console.log("[finalizeMove] Decrypted isInvalid:", isInvalid);
 
       // Step 2: Call finalizeMove with the decrypted value and proof
-      console.log("[finalizeMove] Step 2: Calling contract finalizeMove...");
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi: SIMPHANTOE_ABI,
         functionName: "finalizeMove",
         args: [gameId, playerAddress, isInvalid, decrypted.decryptionProof],
       });
-      console.log("[finalizeMove] Transaction submitted, hash:", txHash);
 
       // Step 3: Wait for transaction to be mined
-      console.log("[finalizeMove] Waiting for transaction confirmation...");
-      const receipt = await publicClient?.waitForTransactionReceipt({ hash: txHash });
-      console.log("[finalizeMove] Transaction confirmed, block:", receipt?.blockNumber);
+      await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
       queryClient.invalidateQueries({ queryKey: ["readContract"] });
       return { txHash, isInvalid };
@@ -267,29 +252,22 @@ export function useFinalizeGameState() {
       if (!contractAddress) throw new Error("Contract not configured");
 
       // Step 1: Decrypt winner and collision
-      console.log("[finalizeGameState] Decrypting handles:", { winnerHandle, collisionHandle });
       const decrypted = await decrypt([winnerHandle, collisionHandle]);
       if (!decrypted) throw new Error("Failed to decrypt game state");
 
-      console.log("[finalizeGameState] Decrypted clearValues:", decrypted.clearValues);
       const winner = Number(decrypted.clearValues[winnerHandle] as bigint);
       const collision = decrypted.clearValues[collisionHandle] as boolean;
-      console.log("[finalizeGameState] Parsed values:", { winner, collision });
 
       // Step 2: Call finalizeGameState
-      console.log("[finalizeGameState] Calling contract finalizeGameState...");
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi: SIMPHANTOE_ABI,
         functionName: "finalizeGameState",
         args: [gameId, winner, collision, decrypted.decryptionProof],
       });
-      console.log("[finalizeGameState] Transaction submitted, hash:", txHash);
 
       // Step 3: Wait for transaction to be mined
-      console.log("[finalizeGameState] Waiting for transaction confirmation...");
-      const receipt = await publicClient?.waitForTransactionReceipt({ hash: txHash });
-      console.log("[finalizeGameState] Transaction confirmed, block:", receipt?.blockNumber);
+      await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
       queryClient.invalidateQueries({ queryKey: ["readContract"] });
       return { txHash, winner, collision };
@@ -361,10 +339,8 @@ export function useGameEvents(gameId: bigint | undefined) {
     abi: SIMPHANTOE_ABI,
     eventName: "MoveMade",
     onLogs: (logs) => {
-      console.log("[EVENT] MoveMade received:", logs);
       const relevant = logs.find((log) => log.args.gameId === gameId);
       if (relevant) {
-        console.log("[EVENT] MoveMade for our game:", relevant.args);
         setLastEvent({ type: "made", data: relevant.args });
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
@@ -377,10 +353,8 @@ export function useGameEvents(gameId: bigint | undefined) {
     abi: SIMPHANTOE_ABI,
     eventName: "MovesProcessed",
     onLogs: (logs) => {
-      console.log("[EVENT] MovesProcessed received:", logs);
       const relevant = logs.find((log) => log.args.gameId === gameId);
       if (relevant) {
-        console.log("[EVENT] MovesProcessed for our game:", relevant.args);
         setLastEvent({ type: "processed", data: relevant.args });
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
@@ -393,10 +367,8 @@ export function useGameEvents(gameId: bigint | undefined) {
     abi: SIMPHANTOE_ABI,
     eventName: "Collision",
     onLogs: (logs) => {
-      console.log("[EVENT] Collision received:", logs);
       const relevant = logs.find((log) => log.args.gameId === gameId);
       if (relevant) {
-        console.log("[EVENT] Collision for our game:", relevant.args);
         setLastEvent({ type: "collision", data: relevant.args });
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
@@ -572,21 +544,16 @@ export function useGameFlow(gameId: bigint | undefined) {
 
   // Handle submitting a move
   const handleSubmitMove = useCallback(async () => {
-    console.log("useGameFlow.handleSubmitMove called", { gameId, currentRoundMove: gameState.currentRoundMove });
     // Note: gameId can be 0n which is falsy, so check for undefined explicitly
     if (gameId === undefined || !gameState.currentRoundMove) {
-      console.log("handleSubmitMove early return - no gameId or currentRoundMove");
       return;
     }
 
     const { x, y } = gameState.currentRoundMove;
-    console.log("Submitting move at coordinates:", { x, y });
 
     try {
       setFheStatus({ type: "encrypt", message: "Encrypting move..." });
-      console.log("Calling submitMove...");
       await submitMove(gameId, x, y);
-      console.log("submitMove completed successfully");
       setFheStatus({ type: "submit", message: "Move submitted!" });
       needsFinalizeMoveRef.current = true;
     } catch (error) {
@@ -610,7 +577,6 @@ export function useGameFlow(gameId: bigint | undefined) {
         isInvalidHandle &&
         isInvalidHandle !== "0x0000000000000000000000000000000000000000000000000000000000000000"
       ) {
-        console.log("[stuckMoveCheck] Detected stuck move on page load, triggering finalization...");
         stuckMoveCheckDoneRef.current = true;
         needsFinalizeMoveRef.current = true;
       }
@@ -620,16 +586,6 @@ export function useGameFlow(gameId: bigint | undefined) {
   // Auto-finalize move when submitted
   useEffect(() => {
     async function autoFinalizeMove() {
-      console.log("[autoFinalizeMove] checking conditions:", {
-        needsFinalize: needsFinalizeMoveRef.current,
-        gameId,
-        playerAddress: gameState.playerAddress,
-        myMove: !!gameState.myMove,
-        myMoveSubmitted: gameState.myMoveSubmitted,
-        myMoveMade: gameState.myMoveMade,
-        showCollision,
-      });
-
       // Skip if not flagged for finalization
       if (!needsFinalizeMoveRef.current) return;
 
@@ -637,19 +593,15 @@ export function useGameFlow(gameId: bigint | undefined) {
       if (!gameState.myMoveSubmitted || gameState.myMoveMade) return;
 
       const isInvalidHandle = gameState.myMove.isInvalid;
-      console.log("[autoFinalizeMove] isInvalidHandle:", isInvalidHandle);
       if (!isInvalidHandle || isInvalidHandle === "0x0000000000000000000000000000000000000000000000000000000000000000")
         return;
 
       needsFinalizeMoveRef.current = false;
-      console.log("[autoFinalizeMove] starting finalization...");
 
       try {
         setFheStatus({ type: "decrypt", message: "Validating move..." });
         setCanRetry(false);
-        console.log("[autoFinalizeMove] calling finalizeMove with handle:", isInvalidHandle);
         const { isInvalid } = await finalizeMove(gameId, gameState.playerAddress, isInvalidHandle);
-        console.log("[autoFinalizeMove] finalizeMove returned, isInvalid:", isInvalid);
 
         if (isInvalid) {
           setFheStatus({ type: "error", message: "Move was invalid!" });
@@ -662,26 +614,20 @@ export function useGameFlow(gameId: bigint | undefined) {
 
           // After finalizing our move, check if both moves are now made
           // This acts as a fallback in case MovesProcessed event is missed
-          console.log("[autoFinalizeMove] Checking if game needs finalization...");
           setTimeout(async () => {
             try {
               const result = await gameState.refetchGame();
               const freshGame = result.data;
-              console.log("[autoFinalizeMove] Fresh game state:", {
-                winnerHandle: freshGame?.winner,
-                collisionHandle: freshGame?.collision,
-              });
 
               // If winner/collision handles are set, trigger game finalization
               if (
                 freshGame?.winner &&
                 freshGame.winner !== "0x0000000000000000000000000000000000000000000000000000000000000000"
               ) {
-                console.log("[autoFinalizeMove] Detected game needs finalization, triggering...");
                 setMovesProcessedPending(true);
               }
             } catch (err) {
-              console.error("[autoFinalizeMove] Failed to check game state:", err);
+              console.error("Failed to check game state:", err);
             }
           }, 2000); // Wait 2 seconds for tx to be mined
         }
@@ -726,42 +672,27 @@ export function useGameFlow(gameId: bigint | undefined) {
   // Auto-finalize game state when MovesProcessed event is received
   useEffect(() => {
     async function autoFinalizeGame() {
-      console.log("[autoFinalizeGame] checking:", {
-        movesProcessedPending,
-        gameId,
-        needsFinalizeGame: needsFinalizeGameRef.current,
-      });
       // Only run when movesProcessedPending is set (triggered by MovesProcessed event)
       if (!movesProcessedPending) return;
       if (gameId === undefined) return;
       if (needsFinalizeGameRef.current) return;
 
-      console.log("[autoFinalizeGame] starting game finalization...");
       // Clear the pending flag immediately to prevent re-entry
       setMovesProcessedPending(false);
       needsFinalizeGameRef.current = true;
 
       try {
         // Refetch game state to ensure we have fresh handles
-        console.log("[autoFinalizeGame] refetching game state...");
         const refetchResult = await gameState.refetchGame();
         const freshGame = refetchResult.data as Game | undefined;
 
         if (!freshGame) {
-          console.error("[autoFinalizeGame] Failed to refetch game state");
           needsFinalizeGameRef.current = false;
           return;
         }
 
-        console.log("[autoFinalizeGame] fresh game:", {
-          isFinished: freshGame.isFinished,
-          winner: freshGame.winner,
-          collision: freshGame.collision,
-        });
-
         // Don't process if game is already finished
         if (freshGame.isFinished) {
-          console.log("[autoFinalizeGame] game already finished, skipping");
           needsFinalizeGameRef.current = false;
           return;
         }
@@ -770,7 +701,6 @@ export function useGameFlow(gameId: bigint | undefined) {
         const collisionHandle = freshGame.collision;
 
         if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") {
-          console.log("[autoFinalizeGame] no winner handle yet, skipping");
           needsFinalizeGameRef.current = false;
           return;
         }
@@ -778,26 +708,21 @@ export function useGameFlow(gameId: bigint | undefined) {
         // Check if we've already processed these exact handles to avoid double-processing
         const handleKey = `${winnerHandle}-${collisionHandle}`;
         if (processedHandlesRef.current.has(handleKey)) {
-          console.log("[autoFinalizeGame] handles already processed, skipping");
           needsFinalizeGameRef.current = false;
           return;
         }
 
-        console.log("[autoFinalizeGame] calling finalizeGameState...");
         setFheStatus({ type: "decrypt", message: "Decrypting result..." });
         const { winner, collision } = await finalizeGameState(gameId, winnerHandle, collisionHandle);
-        console.log("[autoFinalizeGame] finalizeGameState returned:", { winner, collision });
 
         // Mark these handles as processed
         processedHandlesRef.current.add(handleKey);
 
         if (collision) {
-          console.log("[autoFinalizeGame] COLLISION DETECTED! Showing collision UI");
           setShowCollision(true);
           gameState.clearCurrentRoundMove();
           setFheStatus({ type: "collision", message: "Moves collided!" });
         } else {
-          console.log("[autoFinalizeGame] No collision, committing move");
           gameState.commitLocalMove();
           if (winner !== Winner.None) {
             setLastWinner(winner);
@@ -809,18 +734,13 @@ export function useGameFlow(gameId: bigint | undefined) {
 
         // Refetch game and move state to get fresh data from contract
         // (the contract has deleted/updated the moves after finalizeGameState)
-        console.log("[autoFinalizeGame] Refetching game state after finalization...");
         // Small delay to ensure RPC node has updated state
         await new Promise((resolve) => setTimeout(resolve, 500));
         // Invalidate all queries to force fresh fetch
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
         // Refetch with fresh data
-        const updatedGameResult = await gameState.refetchGame();
-        const updatedMovesResult = await gameState.refetchMoves();
-        console.log("[autoFinalizeGame] Fresh data after refetch:", {
-          game: updatedGameResult.data,
-          moves: updatedMovesResult.data,
-        });
+        await gameState.refetchGame();
+        await gameState.refetchMoves();
       } catch (error) {
         console.error("Failed to finalize game state:", error);
         needsFinalizeGameRef.current = false;
@@ -861,12 +781,10 @@ export function useGameFlow(gameId: bigint | undefined) {
       case "processed":
         // Both moves have been processed by the contract
         // Trigger game finalization to decrypt winner/collision
-        console.log("MovesProcessed event received - triggering game finalization");
         setMovesProcessedPending(true);
         break;
       case "collision":
         // Collision detected via event - ensure UI reflects this
-        console.log("Collision event received - showing collision UI");
         setShowCollision(true);
         gameState.clearCurrentRoundMove();
         // Prevent autoFinalizeMove from overwriting the collision status
@@ -920,7 +838,6 @@ export function useGameFlow(gameId: bigint | undefined) {
 
   // Manual trigger for game finalization
   const handleFinalizeGame = useCallback(() => {
-    console.log("[handleFinalizeGame] Manually triggering game finalization");
     // Reset the processed handles to allow re-processing
     processedHandlesRef.current.clear();
     needsFinalizeGameRef.current = false;

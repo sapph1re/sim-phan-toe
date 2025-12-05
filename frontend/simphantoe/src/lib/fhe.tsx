@@ -344,9 +344,7 @@ export function FHEProvider({ children }: { children: ReactNode }) {
 
       try {
         // Request public decryption through the relayer
-        console.log("[publicDecrypt] Calling relayer with handles:", handles);
         const result = await instance.publicDecrypt(handles);
-        console.log("[publicDecrypt] Relayer returned:", result);
 
         return {
           clearValues: result.clearValues,
