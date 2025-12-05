@@ -13,6 +13,58 @@ import {
 } from "../lib/contracts";
 import { useFHE, useEncryptMove, usePublicDecrypt, RelayerError } from "../lib/fhe";
 
+// Helper hook for localStorage-backed moves (persists across page refreshes)
+function usePersistedMoves(gameId: bigint | undefined, playerAddress: string | undefined) {
+  const [moves, setMovesInternal] = useState<LocalMove[]>([]);
+
+  // Generate a unique storage key for this game/player combination
+  const storageKey = useMemo(() => {
+    if (gameId === undefined || !playerAddress) return null;
+    return `simphantoe-moves-${gameId.toString()}-${playerAddress.toLowerCase()}`;
+  }, [gameId, playerAddress]);
+
+  // Use a ref to always access the latest storageKey in the setter
+  const storageKeyRef = useRef(storageKey);
+  storageKeyRef.current = storageKey;
+
+  // Load moves from localStorage when storage key changes
+  useEffect(() => {
+    if (!storageKey) {
+      setMovesInternal([]);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setMovesInternal(stored ? JSON.parse(stored) : []);
+    } catch (e) {
+      console.error("Failed to load moves from localStorage:", e);
+      setMovesInternal([]);
+    }
+  }, [storageKey]);
+
+  // Custom setter that also persists to localStorage
+  const setMoves = useCallback((newMoves: LocalMove[] | ((prev: LocalMove[]) => LocalMove[])) => {
+    setMovesInternal((prev) => {
+      const updated = typeof newMoves === "function" ? newMoves(prev) : newMoves;
+
+      // Persist to localStorage using current key from ref
+      const currentKey = storageKeyRef.current;
+      if (currentKey) {
+        try {
+          localStorage.setItem(currentKey, JSON.stringify(updated));
+        } catch (e) {
+          console.error("Failed to save moves to localStorage:", e);
+        }
+      }
+
+      return updated;
+    });
+  }, []);
+
+  return { moves, setMoves };
+}
+
 // Hook to get the contract address with validation
 export function useContractAddress() {
   const address = SIMPHANTOE_ADDRESS;
@@ -401,8 +453,8 @@ export function useCurrentPlayerGameState(gameId: bigint | undefined) {
   const { data: canSubmit } = useCanSubmitMove(gameId, playerAddress);
   const { isLoading: fheLoading } = useFHE();
 
-  // Local move tracking (player's own moves that haven't been revealed yet)
-  const [myLocalMoves, setMyLocalMoves] = useState<LocalMove[]>([]);
+  // Local move tracking - persisted to localStorage per game/player
+  const { moves: myLocalMoves, setMoves: setMyLocalMoves } = usePersistedMoves(gameId, playerAddress);
   const [currentRoundMove, setCurrentRoundMove] = useState<{ x: number; y: number } | null>(null);
   const [gamePhase, setGamePhase] = useState<GamePhase>(GamePhase.SelectingMove);
 
@@ -573,10 +625,7 @@ export function useGameFlow(gameId: bigint | undefined) {
     // Check if move is submitted but not finalized
     if (gameState.myMoveSubmitted && !gameState.myMoveMade) {
       const isInvalidHandle = gameState.myMove.isInvalid;
-      if (
-        isInvalidHandle &&
-        isInvalidHandle !== "0x0000000000000000000000000000000000000000000000000000000000000000"
-      ) {
+      if (isInvalidHandle && isInvalidHandle !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
         stuckMoveCheckDoneRef.current = true;
         needsFinalizeMoveRef.current = true;
       }
