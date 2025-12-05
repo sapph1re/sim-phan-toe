@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { flushSync } from "react-dom";
 import { GameBoard } from "./GameBoard";
 import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
@@ -9,9 +9,11 @@ import { Winner } from "../lib/contracts";
 interface GameViewProps {
   gameId: bigint;
   onBack: () => void;
+  isJoining?: boolean;
+  onJoinComplete?: () => void;
 }
 
-export function GameView({ gameId, onBack }: GameViewProps) {
+export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameViewProps) {
   const {
     game,
     isLoading,
@@ -94,6 +96,13 @@ export function GameView({ gameId, onBack }: GameViewProps) {
   const isFHEOperating =
     isPendingSubmit || isEncrypting || isSubmitting || isDecryptingMove || isFinalizing || isDecryptingState || isFinalizingState;
 
+  // When user becomes a player (join transaction confirmed), notify parent
+  useEffect(() => {
+    if (isPlayer && isJoining && onJoinComplete) {
+      onJoinComplete();
+    }
+  }, [isPlayer, isJoining, onJoinComplete]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -132,6 +141,22 @@ export function GameView({ gameId, onBack }: GameViewProps) {
   }
 
   if (!isPlayer) {
+    // Show "Joining game..." while the join transaction is being confirmed
+    if (isJoining) {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="glass p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 border-4 border-cyber-purple/30 border-t-cyber-purple rounded-full animate-spin" />
+            <h2 className="font-display text-2xl font-bold mb-4">Joining Game...</h2>
+            <p className="text-gray-500 mb-6">
+              Waiting for your join transaction to be confirmed on the blockchain.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Otherwise show spectator mode
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="glass p-8 text-center">

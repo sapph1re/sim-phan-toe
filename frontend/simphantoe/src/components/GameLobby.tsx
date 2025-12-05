@@ -8,7 +8,7 @@ import {
 } from '../hooks/useSimPhanToe'
 
 interface GameLobbyProps {
-  onSelectGame: (gameId: bigint) => void
+  onSelectGame: (gameId: bigint, joining?: boolean) => void
 }
 
 export function GameLobby({ onSelectGame }: GameLobbyProps) {
@@ -29,7 +29,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
   const handleJoinGame = async (gameId: bigint) => {
     try {
       await joinGame(gameId)
-      onSelectGame(gameId)
+      onSelectGame(gameId, true) // true = joining (transaction pending confirmation)
     } catch (error) {
       console.error('Failed to join game:', error)
     }

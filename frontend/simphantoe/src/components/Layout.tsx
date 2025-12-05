@@ -18,6 +18,17 @@ export function Layout() {
   const { isConfigured } = useContractAddress();
   const { isLoading: fheLoading, error: fheError, isSupported: fheSupported } = useFHE();
   const [activeGameId, setActiveGameId] = useState<bigint | null>(null);
+  const [isJoiningGame, setIsJoiningGame] = useState(false);
+
+  const handleSelectGame = (gameId: bigint, joining = false) => {
+    setActiveGameId(gameId);
+    setIsJoiningGame(joining);
+  };
+
+  const handleBack = () => {
+    setActiveGameId(null);
+    setIsJoiningGame(false);
+  };
 
   const networkName = NETWORK_NAMES[chainId] || `Chain ${chainId}`;
   const isOnSepolia = chainId === 11155111;
@@ -105,9 +116,9 @@ export function Layout() {
         ) : !isConfigured ? (
           <ContractNotConfigured />
         ) : activeGameId !== null ? (
-          <GameView gameId={activeGameId} onBack={() => setActiveGameId(null)} />
+          <GameView gameId={activeGameId} onBack={handleBack} isJoining={isJoiningGame} onJoinComplete={() => setIsJoiningGame(false)} />
         ) : (
-          <GameLobby onSelectGame={(id) => setActiveGameId(id)} />
+          <GameLobby onSelectGame={handleSelectGame} />
         )}
       </main>
 
