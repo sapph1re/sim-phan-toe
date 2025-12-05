@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { GameBoard } from "./GameBoard";
 import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
 import { FHEStatus } from "./FHEStatus";
@@ -46,6 +47,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
 
   const { startGame } = useStartGame();
   const [collisionCell, setCollisionCell] = useState<{ x: number; y: number } | null>(null);
+  const [isPendingSubmit, setIsPendingSubmit] = useState(false);
 
   const handleCellClick = useCallback(
     (x: number, y: number) => {
@@ -59,10 +61,18 @@ export function GameView({ gameId, onBack }: GameViewProps) {
     if (!currentRoundMove || myMoveSubmitted) {
       return;
     }
+    // Force React to immediately update the DOM
+    flushSync(() => {
+      setIsPendingSubmit(true);
+    });
+    // Yield to browser event loop to allow paint before heavy FHE work starts
+    await new Promise(resolve => setTimeout(resolve, 0));
     try {
       await handleSubmitMove();
     } catch (error) {
       console.error("Failed to submit move:", error);
+    } finally {
+      setIsPendingSubmit(false);
     }
   };
 
@@ -82,7 +92,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
 
   // Determine if any FHE operation is in progress
   const isFHEOperating =
-    isEncrypting || isSubmitting || isDecryptingMove || isFinalizing || isDecryptingState || isFinalizingState;
+    isPendingSubmit || isEncrypting || isSubmitting || isDecryptingMove || isFinalizing || isDecryptingState || isFinalizingState;
 
   if (isLoading) {
     return (
@@ -205,7 +215,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                       />
                     </svg>
-                    {isEncrypting ? "Encrypting..." : isSubmitting ? "Submitting..." : "Processing..."}
+                    {isSubmitting ? "Submitting..." : "Encrypting..."}
                   </>
                 ) : myMoveSubmitted ? (
                   <>
@@ -220,7 +230,7 @@ export function GameView({ gameId, onBack }: GameViewProps) {
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    Encrypt & Submit ({currentRoundMove.x}, {currentRoundMove.y})
+                    Encrypt & Submit
                   </>
                 ) : (
                   "Select a Cell"
