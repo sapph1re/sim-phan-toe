@@ -28,8 +28,10 @@ export function GameView({ gameId, onBack }: GameViewProps) {
     addLocalMove,
     handleSubmitMove,
     handleRetry,
+    handleFinalizeGame,
     fheStatus,
     canRetry,
+    needsGameFinalization,
     isEncrypting,
     isSubmitting,
     isDecryptingMove,
@@ -243,6 +245,45 @@ export function GameView({ gameId, onBack }: GameViewProps) {
             canRetry={canRetry}
             onRetry={handleRetry}
           />
+
+          {/* Finalize Game Button - shown when game is stuck */}
+          {needsGameFinalization && !isDecryptingState && !isFinalizingState && (
+            <div className="glass p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-l-4 border-l-yellow-500">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-yellow-500"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-yellow-500">Game needs finalization</p>
+                    <p className="text-xs text-gray-500">
+                      Both moves were processed. Click to finalize the game result.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleFinalizeGame}
+                  className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/50 text-yellow-400 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                  Finalize Game
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Move Status */}
           <MoveIndicator
