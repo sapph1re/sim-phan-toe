@@ -14,10 +14,11 @@ contract SimPhanToe is ZamaEthereumConfig {
         uint256 gameId;
         address player1;
         address player2;
-        euint8[3][3] board; // encrypted Cells
-        euint8 winner; // encrypted Winner
-        ebool collision; // encrypted flag indicating if the latest moves collided
-        bool isFinished;
+        euint8[4][4] eBoard; // encrypted Cells
+        euint8 eWinner; // encrypted Winner produced in FHE computations, then publicly decrypted
+        ebool eCollision; // encrypted flag indicating if the latest moves collided
+        Cell[4][4] board; // the board is decrypted when the game finishes
+        Winner winner;  // decrypted winner, for convenience when UI is checking the game state
     }
 
     struct Move {
@@ -63,6 +64,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     event MovesProcessed(uint256 indexed gameId);
     event Collision(uint256 indexed gameId);
     event GameUpdated(uint256 indexed gameId, Winner winner);
+    event BoardRevealed(uint256 indexed gameId);
 
     constructor() {
         CELL_EMPTY = FHE.asEuint8(uint8(Cell.Empty));
@@ -89,22 +91,29 @@ contract SimPhanToe is ZamaEthereumConfig {
             gameId: gameCount,
             player1: msg.sender,
             player2: address(0),
-            board: [
-                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY],
-                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY],
-                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY]
+            eBoard: [
+                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY, CELL_EMPTY],
+                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY, CELL_EMPTY],
+                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY, CELL_EMPTY],
+                [CELL_EMPTY, CELL_EMPTY, CELL_EMPTY, CELL_EMPTY]
             ],
-            winner: WINNER_NONE,
-            collision: FHE.asEbool(false),
-            isFinished: false
+            eWinner: WINNER_NONE,
+            eCollision: FHE.asEbool(false),
+            board: [
+                [Cell.Empty, Cell.Empty, Cell.Empty, Cell.Empty],
+                [Cell.Empty, Cell.Empty, Cell.Empty, Cell.Empty],
+                [Cell.Empty, Cell.Empty, Cell.Empty, Cell.Empty],
+                [Cell.Empty, Cell.Empty, Cell.Empty, Cell.Empty]
+            ],
+            winner: Winner.None
         });
         games.push(game);
         // Grant the contract permission to use the game's encrypted values
-        FHE.allowThis(games[gameCount].winner);
-        FHE.allowThis(games[gameCount].collision);
-        for (uint8 i = 0; i < 3; i++) {
-            for (uint8 j = 0; j < 3; j++) {
-                FHE.allowThis(games[gameCount].board[i][j]);
+        FHE.allowThis(games[gameCount].eWinner);
+        FHE.allowThis(games[gameCount].eCollision);
+        for (uint8 i = 0; i < 4; i++) {
+            for (uint8 j = 0; j < 4; j++) {
+                FHE.allowThis(games[gameCount].eBoard[i][j]);
             }
         }
         emit GameStarted(game.gameId, game.player1);
@@ -125,8 +134,8 @@ contract SimPhanToe is ZamaEthereumConfig {
 
     /// @notice Submit an encrypted move
     /// @param _gameId The game ID
-    /// @param _inputX Encrypted X coordinate (0-2)
-    /// @param _inputY Encrypted Y coordinate (0-2)
+    /// @param _inputX Encrypted X coordinate (0-3)
+    /// @param _inputY Encrypted Y coordinate (0-3)
     /// @param _inputProof ZK proof for the encrypted inputs
     /// @dev Move validity is checked in FHE; isInvalid flag is made publicly decryptable,
     /// clients should reflect the move in the UI and trigger decryption of the isInvalid flag
@@ -139,7 +148,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     ) external {
         Game memory game = games[_gameId];
         require(game.player1 != address(0) && game.player2 != address(0), "Game has not started yet.");
-        require(!game.isFinished, "Game is finished.");
+        require(game.winner == Winner.None, "Game is finished.");
         require(msg.sender == game.player1 || msg.sender == game.player2, "You are not a player in this game.");
         require(!nextMoves[_gameId][msg.sender].isSubmitted, "Move already submitted.");
 
@@ -147,9 +156,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         euint8 y = FHE.fromExternal(_inputY, _inputProof);
 
         // check if the move is valid
-        ebool xValid = FHE.lt(x, 3);
-        ebool yValid = FHE.lt(y, 3);
-        ebool cellEmpty = FHE.eq(getCell(game.board, x, y), CELL_EMPTY);
+        ebool xValid = FHE.lt(x, 4);
+        ebool yValid = FHE.lt(y, 4);
+        ebool cellEmpty = FHE.eq(getCell(game.eBoard, x, y), CELL_EMPTY);
         ebool allValid = FHE.and(FHE.and(xValid, yValid), cellEmpty);
 
         // save the move
@@ -220,17 +229,17 @@ contract SimPhanToe is ZamaEthereumConfig {
         bytes memory _decryptionProof
     ) external {
         Game memory game = games[_gameId];
-        require(!game.isFinished, "Game already finished.");
+        require(game.winner == Winner.None, "Game already finished.");
         // verify decryption of the winner value and the collision flag
         bytes32[] memory ciphertextHandles = new bytes32[](2);
-        ciphertextHandles[0] = FHE.toBytes32(game.winner);
-        ciphertextHandles[1] = FHE.toBytes32(game.collision);
+        ciphertextHandles[0] = FHE.toBytes32(game.eWinner);
+        ciphertextHandles[1] = FHE.toBytes32(game.eCollision);
         bytes memory abiEncodedCleartexts = abi.encode(_winner, _collision);
         FHE.checkSignatures(ciphertextHandles, abiEncodedCleartexts, _decryptionProof);
         // if moves collided, let the players submit another move
         if (_collision) {
-            game.collision = FHE.asEbool(false);
-            FHE.allowThis(game.collision);
+            game.eCollision = FHE.asEbool(false);
+            FHE.allowThis(game.eCollision);
             games[_gameId] = game;
             emit Collision(_gameId);
             return;
@@ -238,11 +247,44 @@ contract SimPhanToe is ZamaEthereumConfig {
         }
         // finish the game if we have a winner
         if (_winner != uint8(Winner.None)) {
-            game.isFinished = true;
+            game.winner = Winner(_winner);
             games[_gameId] = game;
+            // decrypt the board
+            for (uint8 i = 0; i < 4; i++) {
+                for (uint8 j = 0; j < 4; j++) {
+                    FHE.makePubliclyDecryptable(game.eBoard[i][j]);
+                }
+            }
         }
-        emit GameUpdated(_gameId, Winner(_winner));
-        // clients should reflect the new game state and announce the result if finished
+        emit GameUpdated(_gameId, game.winner);
+        // clients should reflect the new game state, and if there's a winner,
+        // trigger decryption of the board and then call revealBoard()
+    }
+
+    /// @notice Reveal the board to the UI
+    /// @param _gameId The game ID
+    /// @param _board The decrypted board
+    /// @param _decryptionProof KMS signature proving correct decryption
+    /// @dev Must be called after finalizeGameState() if the game has finished
+    function revealBoard(uint256 _gameId, uint8[4][4] memory _board, bytes memory _decryptionProof) external {
+        Game memory game = games[_gameId];
+        require(game.winner != Winner.None, "Game is not finished.");
+        // verify decryption of the board
+        bytes32[] memory ciphertextHandles = new bytes32[](16);
+        for (uint8 i = 0; i < 4; i++) {
+            for (uint8 j = 0; j < 4; j++) {
+                ciphertextHandles[i * 4 + j] = FHE.toBytes32(game.eBoard[i][j]);
+            }
+        }
+        bytes memory abiEncodedCleartexts = abi.encode(_board);
+        FHE.checkSignatures(ciphertextHandles, abiEncodedCleartexts, _decryptionProof);
+        for (uint8 i = 0; i < 4; i++) {
+            for (uint8 j = 0; j < 4; j++) {
+                game.board[i][j] = Cell(_board[i][j]);
+            }
+        }
+        games[_gameId] = game;
+        emit BoardRevealed(_gameId);
     }
 
     /// @notice Get game data
@@ -309,7 +351,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     function canSubmitMove(uint256 _gameId, address _player) external view returns (bool canSubmit) {
         Game memory game = games[_gameId];
         if (game.player2 == address(0)) return false; // waiting for player 2
-        if (game.isFinished) return false;
+        if (game.winner != Winner.None) return false;   // game already finished
         if (_player != game.player1 && _player != game.player2) return false;
         return !nextMoves[_gameId][_player].isSubmitted;
     }
@@ -322,19 +364,17 @@ contract SimPhanToe is ZamaEthereumConfig {
         Move memory moveOne = nextMoves[_gameId][game.player1];
         Move memory moveTwo = nextMoves[_gameId][game.player2];
         // check for collision
-        game.collision = FHE.and(FHE.eq(moveOne.x, moveTwo.x), FHE.eq(moveOne.y, moveTwo.y));
-        FHE.allowThis(game.collision);
-        FHE.makePubliclyDecryptable(game.collision);
+        game.eCollision = FHE.and(FHE.eq(moveOne.x, moveTwo.x), FHE.eq(moveOne.y, moveTwo.y));
+        FHE.allowThis(game.eCollision);
+        FHE.makePubliclyDecryptable(game.eCollision);
         // set the cells according to the moves or don't change anything if they collided
-        setCell(game.board, moveOne.x, moveOne.y, FHE.select(game.collision, CELL_EMPTY, CELL_PLAYER1));
-        setCell(game.board, moveTwo.x, moveTwo.y, FHE.select(game.collision, CELL_EMPTY, CELL_PLAYER2));
+        setCell(game.eBoard, moveOne.x, moveOne.y, FHE.select(game.eCollision, CELL_EMPTY, CELL_PLAYER1));
+        setCell(game.eBoard, moveTwo.x, moveTwo.y, FHE.select(game.eCollision, CELL_EMPTY, CELL_PLAYER2));
         // technically, if there's a collision no move is made so there's no point in checking the winner,
         // but because we cannot really branch the logic in FHE I guess we can just afford to run it anyways
-        // another approach would be to publicly decrypt the collision status to enable branching, but that
-        // would require one more transaction, which would be worse UX
-        game.winner = whoWins(_gameId);
-        FHE.allowThis(game.winner);
-        FHE.makePubliclyDecryptable(game.winner);
+        game.eWinner = whoWins(_gameId);
+        FHE.allowThis(game.eWinner);
+        FHE.makePubliclyDecryptable(game.eWinner);
         // free nextMoves
         delete nextMoves[_gameId][game.player1];
         delete nextMoves[_gameId][game.player2];
@@ -344,9 +384,9 @@ contract SimPhanToe is ZamaEthereumConfig {
     }
 
     /// @notice Write to a cell in the board in FHE
-    function setCell(euint8[3][3] storage _board, euint8 _x, euint8 _y, euint8 _cell) private {
-        for (uint8 i = 0; i < 3; i++) {
-            for (uint8 j = 0; j < 3; j++) {
+    function setCell(euint8[4][4] storage _board, euint8 _x, euint8 _y, euint8 _cell) private {
+        for (uint8 i = 0; i < 4; i++) {
+            for (uint8 j = 0; j < 4; j++) {
                 _board[i][j] = FHE.select(FHE.and(FHE.eq(_y, i), FHE.eq(_x, j)), _cell, _board[i][j]);
                 FHE.allowThis(_board[i][j]);
             }
@@ -354,9 +394,9 @@ contract SimPhanToe is ZamaEthereumConfig {
     }
 
     /// @notice Read a cell in the board in FHE
-    function getCell(euint8[3][3] memory _board, euint8 _x, euint8 _y) private returns (euint8 cell) {
-        for (uint8 i = 0; i < 3; i++) {
-            for (uint8 j = 0; j < 3; j++) {
+    function getCell(euint8[4][4] memory _board, euint8 _x, euint8 _y) private returns (euint8 cell) {
+        for (uint8 i = 0; i < 4; i++) {
+            for (uint8 j = 0; j < 4; j++) {
                 cell = FHE.select(FHE.and(FHE.eq(_y, i), FHE.eq(_x, j)), _board[i][j], cell);
             }
         }
@@ -368,7 +408,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @return winner Encrypted Winner enum value
     function whoWins(uint256 _gameId) private returns (euint8 winner) {
         Game memory game = games[_gameId];
-        euint8[3][3] memory board = game.board;
+        euint8[4][4] memory board = game.eBoard;
         // check each row, column and diagonal for winners
         euint8 winnerRow = whoWinsByRow(board);
         euint8 winnerColumn = whoWinsByColumn(board);
@@ -404,12 +444,18 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @notice Determine if there's a winner in any row
     /// @param _board The board
     /// @return winner Encrypted Winner enum value
-    function whoWinsByRow(euint8[3][3] memory _board) private returns (euint8 winner) {
+    function whoWinsByRow(euint8[4][4] memory _board) private returns (euint8 winner) {
         winner = WINNER_NONE;
-        for (uint8 i = 0; i < 3; i++) {
+        for (uint8 i = 0; i < 4; i++) {
             // check each row if it's complete
             ebool rowComplete = FHE.and(
-                FHE.and(FHE.eq(_board[i][0], _board[i][1]), FHE.eq(_board[i][1], _board[i][2])),
+                FHE.and(
+                    FHE.and(
+                        FHE.eq(_board[i][0], _board[i][1]),
+                        FHE.eq(_board[i][1], _board[i][2])
+                    ),
+                    FHE.eq(_board[i][2], _board[i][3])
+                ),
                 FHE.ne(_board[i][0], CELL_EMPTY)
             );
             // whose row is it?
@@ -419,7 +465,8 @@ contract SimPhanToe is ZamaEthereumConfig {
                 WINNER_NONE
             );
             // if there's already a winner from another row then it's a draw
-            // because one player can't complete two rows at the same time
+            // one player can't complete two rows at the same time, because
+            // it would require two moves and the game would have already finished.
             ebool rowHasWinner = FHE.ne(rowWinner, WINNER_NONE);
             ebool alreadyHasWinner = FHE.ne(winner, WINNER_NONE);
             ebool isDraw = FHE.and(rowHasWinner, alreadyHasWinner);
@@ -431,12 +478,18 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @notice Determine if there's a winner in any column
     /// @param _board The board
     /// @return winner Encrypted Winner enum value
-    function whoWinsByColumn(euint8[3][3] memory _board) private returns (euint8 winner) {
+    function whoWinsByColumn(euint8[4][4] memory _board) private returns (euint8 winner) {
         winner = WINNER_NONE;
-        for (uint8 i = 0; i < 3; i++) {
+        for (uint8 i = 0; i < 4; i++) {
             // check each column if it's complete
             ebool columnComplete = FHE.and(
-                FHE.and(FHE.eq(_board[0][i], _board[1][i]), FHE.eq(_board[1][i], _board[2][i])),
+                FHE.and(
+                    FHE.and(
+                        FHE.eq(_board[0][i], _board[1][i]),
+                        FHE.eq(_board[1][i], _board[2][i])
+                    ),
+                    FHE.eq(_board[2][i], _board[3][i])
+                ),
                 FHE.ne(_board[0][i], CELL_EMPTY)
             );
             // whose column is it?
@@ -445,8 +498,9 @@ contract SimPhanToe is ZamaEthereumConfig {
                 FHE.select(FHE.eq(_board[0][i], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2),
                 WINNER_NONE
             );
-            // if there's already a winner from another column then it's a draw
-            // because one player can't complete two columns at the same time
+            // if there's already a winner from another column then it's a draw:
+            // one player can't complete two columns at the same time, because
+            // it would require two moves and the game would have already finished.
             ebool columnHasWinner = FHE.ne(columnWinner, WINNER_NONE);
             ebool alreadyHasWinner = FHE.ne(winner, WINNER_NONE);
             ebool isDraw = FHE.and(columnHasWinner, alreadyHasWinner);
@@ -458,15 +512,50 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @notice Determine if there's a winner in any diagonal
     /// @param _board The board
     /// @return winner Encrypted Winner enum value
-    function whoWinsByDiagonal(euint8[3][3] memory _board) private returns (euint8 winner) {
+    function whoWinsByDiagonal(euint8[4][4] memory _board) private returns (euint8 winner) {
         // check if any diagonal is complete
-        ebool mainDiagonalEqual = FHE.and(FHE.eq(_board[0][0], _board[1][1]), FHE.eq(_board[1][1], _board[2][2]));
-        ebool antiDiagonalEqual = FHE.and(FHE.eq(_board[0][2], _board[1][1]), FHE.eq(_board[1][1], _board[2][0]));
-        // if the center cell is not empty and any diagonal is equal then the center cell owner is the winner
-        winner = FHE.select(
-            FHE.and(FHE.ne(_board[1][1], CELL_EMPTY), FHE.or(mainDiagonalEqual, antiDiagonalEqual)),
-            FHE.select(FHE.eq(_board[1][1], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2),
+        ebool mainDiagonalEqual = FHE.and(
+            FHE.and(
+                FHE.and(
+                    FHE.eq(_board[0][0], _board[1][1]),
+                    FHE.eq(_board[1][1], _board[2][2])
+                ),
+                FHE.eq(_board[2][2], _board[3][3])
+            ),
+            FHE.ne(_board[0][0], CELL_EMPTY)
+        );
+        ebool antiDiagonalEqual = FHE.and(
+            FHE.and(
+                FHE.and(
+                    FHE.eq(_board[0][3], _board[1][2]),
+                    FHE.eq(_board[1][2], _board[2][1])
+                ),
+                FHE.eq(_board[2][1], _board[3][0])
+            ),
+            FHE.ne(_board[0][3], CELL_EMPTY)
+        );
+        // who wins which diagonal?
+        euint8 mainDiagonalWinner = FHE.select(
+            mainDiagonalEqual,
+            FHE.select(FHE.eq(_board[0][0], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2),
             WINNER_NONE
+        );
+        euint8 antiDiagonalWinner = FHE.select(
+            antiDiagonalEqual,
+            FHE.select(FHE.eq(_board[0][3], CELL_PLAYER1), WINNER_PLAYER1, WINNER_PLAYER2),
+            WINNER_NONE
+        );
+        // if both players won a diagonal then it's a draw
+        ebool isDraw = FHE.and(FHE.ne(mainDiagonalWinner, WINNER_NONE), FHE.ne(antiDiagonalWinner, WINNER_NONE));
+        winner = FHE.select(
+            isDraw,
+            WINNER_DRAW,
+            // if main is winner, return main, otherwise return anti (it's either a winner or none)
+            FHE.select(
+                FHE.ne(mainDiagonalWinner, WINNER_NONE),
+                mainDiagonalWinner,
+                antiDiagonalWinner
+            )
         );
         return winner;
     }
@@ -474,10 +563,10 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @notice Determine if the board is full
     /// @param _board The board
     /// @return isFull Encrypted boolean value
-    function isBoardFull(euint8[3][3] memory _board) private returns (ebool isFull) {
+    function isBoardFull(euint8[4][4] memory _board) private returns (ebool isFull) {
         isFull = FHE.asEbool(true);
-        for (uint8 i = 0; i < 3; i++) {
-            for (uint8 j = 0; j < 3; j++) {
+        for (uint8 i = 0; i < 4; i++) {
+            for (uint8 j = 0; j < 4; j++) {
                 // if any cell is empty then the board is not full
                 isFull = FHE.select(FHE.eq(_board[i][j], CELL_EMPTY), FHE.asEbool(false), isFull);
             }
