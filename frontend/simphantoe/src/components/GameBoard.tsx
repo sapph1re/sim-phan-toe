@@ -86,7 +86,6 @@ export function GameBoard({
               const isCollisionCell = isCollision(x, y)
               const canClick = canClickCell(x, y)
               const revealedCell = getRevealedCell(x, y)
-              const isOpponentCell = revealedCell === Cell.Player1 ? !isPlayer1 : revealedCell === Cell.Player2 ? isPlayer1 : false
 
               return (
                 <button
