@@ -862,8 +862,6 @@ describe("SimPhanToe", function () {
 
     it("should not allow revealing board before game finishes", async function () {
       // Try to reveal board before game is finished
-      const game = await contract.getGame(0);
-
       // Create dummy board data
       const dummyBoard: [
         [number, number, number, number],
