@@ -9,7 +9,7 @@ moves are encrypted and hidden.
 
 https://simphantoe.netlify.app/
 
-Deployed contract address in Sepolia: 0xda70dc4AA88DEcD0edE470c3481b67D0D8c0B03F
+Deployed contract address in Sepolia: 0x52507f480444c844b1AB304f4Cbc5fED6077E8f0
 
 ## Game Rules
 
