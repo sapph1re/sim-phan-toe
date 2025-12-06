@@ -1,6 +1,6 @@
 # Sim Phan Toe
 
-Simultaneous Phantom Tic-Tac-Toe game with FHEVM
+Simultaneous Phantom 4x4 Tic-Tac-Toe game with FHEVM
 
 A twist on the classic game where both players make their moves **simultaneously**. No first-mover advantage. Opponent's
 moves are encrypted and hidden.
@@ -15,13 +15,18 @@ Deployed contract address in Sepolia: 0xda70dc4AA88DEcD0edE470c3481b67D0D8c0B03F
 
 1. **Simultaneous Moves**: Both players select their cell at the same time. Your opponent can't see your choice!
 2. **Collision = No Move**: If both players pick the same cell, neither move counts. Pick again!
-3. **Win Conditions**: Get three in a row, column, or diagonal. If both complete a line simultaneously, it's a draw!
+3. **Win Conditions**: Get four in a row, column, or diagonal. If both complete a line simultaneously, it's a draw!
 
 ### Phantom Mode
 
 - Your moves are encrypted using Fully Homomorphic Encryption (FHE)
 - You can only see your own moves throughout the game
 - Opponent's positions remain hidden
+
+### 4x4 Board
+
+The board is changed to 4x4 because when players move simultaneously they always fill an even number of cells, so a 3x3
+board would often draw at 8 moves with an empty cell left. A 4x4 board allows for a more interesting game.
 
 ## Prerequisites
 
@@ -150,19 +155,10 @@ echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
 ```
 /
 ├── contracts/                # Solidity smart contracts
-│   ├── SimTacToe.sol         # Unencrypted simultaneous tic-tac-toe
 │   └── SimPhanToe.sol        # FHE encrypted phantom tic-tac-toe
 ├── deploy/                   # Deployment scripts
-│   ├── 001_deploy_SimTacToe.ts
 │   └── 002_deploy_SimPhanToe.ts
 ├── frontend/                 # Frontend applications
-│   ├── simtactoe/            # SimTacToe frontend (unencrypted)
-│   │   ├── src/
-│   │   │   ├── components/   # UI components
-│   │   │   ├── hooks/        # React hooks for contract interaction
-│   │   │   └── lib/          # Wagmi config and contract ABI
-│   │   ├── package.json
-│   │   └── vite.config.ts
 │   └── simphantoe/           # SimPhanToe frontend (FHE encrypted)
 │       ├── src/
 │       │   ├── components/   # UI components with phantom board
@@ -176,25 +172,18 @@ echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
 └── package.json              # Root dependencies and scripts
 ```
 
-Note: **SimTacToe** is an unencrypted version of the game where all moves are visible. As a game it doesn't really make
-sense on its own, but its development was a preparatory step before the encrypted version.
-
 ## Available Scripts
 
 | Script                                | Description                              |
 | ------------------------------------- | ---------------------------------------- |
 | `npm run compile`                     | Compile smart contracts                  |
 | `npm run test`                        | Run contract tests                       |
-| `npm run dev:simtactoe`               | Start SimTacToe frontend dev server      |
 | `npm run dev:simphantoe`              | Start SimPhanToe frontend dev server     |
-| `npm run build:simtactoe`             | Build SimTacToe frontend for production  |
 | `npm run build:simphantoe`            | Build SimPhanToe frontend for production |
-| `npm run deploy:localhost`            | Deploy all contracts to local network    |
-| `npm run deploy:sepolia`              | Deploy all contracts to Sepolia testnet  |
-| `npm run deploy:simtactoe:localhost`  | Deploy only SimTacToe to local network   |
-| `npm run deploy:simphantoe:localhost` | Deploy only SimPhanToe to local network  |
-| `npm run deploy:simtactoe:sepolia`    | Deploy only SimTacToe to Sepolia         |
-| `npm run deploy:simphantoe:sepolia`   | Deploy only SimPhanToe to Sepolia        |
+| `npm run deploy:localhost`            | Deploy contracts to local network        |
+| `npm run deploy:sepolia`              | Deploy contracts to Sepolia testnet      |
+| `npm run deploy:simphantoe:localhost` | Deploy SimPhanToe to local network       |
+| `npm run deploy:simphantoe:sepolia`   | Deploy SimPhanToe to Sepolia             |
 
 ## Technology Stack
 

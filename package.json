@@ -8,7 +8,6 @@
     "npm": ">=7.0.0"
   },
   "workspaces": [
-    "frontend/simtactoe",
     "frontend/simphantoe"
   ],
   "license": "BSD-3-Clause-Clear",
@@ -81,18 +80,12 @@
     "chain": "hardhat node --network hardhat --no-deploy",
     "deploy:localhost": "hardhat deploy --network localhost",
     "deploy:sepolia": "hardhat deploy --network sepolia",
-    "deploy:simtactoe:localhost": "hardhat deploy --network localhost --tags SimTacToe",
-    "deploy:simtactoe:sepolia": "hardhat deploy --network sepolia --tags SimTacToe",
     "deploy:simphantoe:localhost": "hardhat deploy --network localhost --tags SimPhanToe",
     "deploy:simphantoe:sepolia": "hardhat deploy --network sepolia --tags SimPhanToe",
     "verify:sepolia": "hardhat verify --network sepolia",
-    "dev:simtactoe": "npm run dev --workspace=simtactoe-frontend",
     "dev:simphantoe": "npm run dev --workspace=simphantoe-frontend",
-    "build:simtactoe": "npm run build --workspace=simtactoe-frontend",
     "build:simphantoe": "npm run build --workspace=simphantoe-frontend",
-    "install:simtactoe": "cd frontend/simtactoe && npm install",
-    "install:simphantoe": "cd frontend/simphantoe && npm install",
-    "install:frontends": "npm run install:simtactoe && npm run install:simphantoe"
+    "install:simphantoe": "cd frontend/simphantoe && npm install"
   },
   "overrides": {
     "ws@>=7.0.0 <7.5.10": ">=7.5.10",
