@@ -406,6 +406,9 @@ describe("SimPhanToe", function () {
   // ==================== WIN DETECTION TESTS ====================
 
   describe("Win Detection", function () {
+    // Increase timeout for FHE-heavy win detection tests (especially during coverage)
+    this.timeout(120000);
+
     beforeEach(async function () {
       await contract.connect(signers.player1).startGame();
       await contract.connect(signers.player2).joinGame(0);
@@ -697,6 +700,9 @@ describe("SimPhanToe", function () {
   // ==================== BOARD REVEAL TESTS ====================
 
   describe("Board Reveal", function () {
+    // Increase timeout for FHE-heavy board reveal tests (especially during coverage)
+    this.timeout(120000);
+
     beforeEach(async function () {
       await contract.connect(signers.player1).startGame();
       await contract.connect(signers.player2).joinGame(0);
@@ -823,13 +829,24 @@ describe("SimPhanToe", function () {
       }
 
       // Call revealBoard
-      await expect(contract.revealBoard(0, board as [[number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number]], boardProof))
+      await expect(
+        contract.revealBoard(
+          0,
+          board as [
+            [number, number, number, number],
+            [number, number, number, number],
+            [number, number, number, number],
+            [number, number, number, number],
+          ],
+          boardProof,
+        ),
+      )
         .to.emit(contract, "BoardRevealed")
         .withArgs(0n);
 
       // Verify the revealed board
       const revealedGame = await contract.getGame(0);
-      
+
       // Check P1's winning row (y=0)
       expect(revealedGame.board[0][0]).to.eq(1n); // Player1 at (0,0)
       expect(revealedGame.board[0][1]).to.eq(1n); // Player1 at (1,0)
@@ -846,9 +863,14 @@ describe("SimPhanToe", function () {
     it("should not allow revealing board before game finishes", async function () {
       // Try to reveal board before game is finished
       const game = await contract.getGame(0);
-      
+
       // Create dummy board data
-      const dummyBoard: [[number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number]] = [
+      const dummyBoard: [
+        [number, number, number, number],
+        [number, number, number, number],
+        [number, number, number, number],
+        [number, number, number, number],
+      ] = [
         [0, 0, 0, 0],
         [0, 0, 0, 0],
         [0, 0, 0, 0],

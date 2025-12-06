@@ -376,7 +376,16 @@ export function useRevealBoard() {
         address: contractAddress,
         abi: SIMPHANTOE_ABI,
         functionName: "revealBoard",
-        args: [gameId, board as [[number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number]], decrypted.decryptionProof],
+        args: [
+          gameId,
+          board as [
+            [number, number, number, number],
+            [number, number, number, number],
+            [number, number, number, number],
+            [number, number, number, number],
+          ],
+          decrypted.decryptionProof,
+        ],
       });
 
       // Step 5: Wait for transaction to be mined
@@ -938,7 +947,7 @@ export function useGameFlow(gameId: bigint | undefined) {
         await gameState.refetchGame();
       } catch (error) {
         console.error("Failed to reveal board:", error);
-        
+
         // Handle RelayerError with detailed information
         if (error instanceof RelayerError) {
           setFheStatus({

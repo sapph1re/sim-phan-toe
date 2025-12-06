@@ -22,24 +22,17 @@ const connectors = connectorsForWallets(
   [
     {
       groupName: "Recommended",
-      wallets: [
-        metaMaskWallet,
-        rabbyWallet,
-        rainbowWallet,
-      ],
+      wallets: [metaMaskWallet, rabbyWallet, rainbowWallet],
     },
     {
       groupName: "Other",
-      wallets: [
-        walletConnectWallet,
-        injectedWallet,
-      ],
+      wallets: [walletConnectWallet, injectedWallet],
     },
   ],
   {
     appName: "SimPhanToe",
     projectId,
-  }
+  },
 );
 
 export const config = createConfig({

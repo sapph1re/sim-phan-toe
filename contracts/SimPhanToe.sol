@@ -18,7 +18,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         euint8 eWinner; // encrypted Winner produced in FHE computations, then publicly decrypted
         ebool eCollision; // encrypted flag indicating if the latest moves collided
         Cell[4][4] board; // the board is decrypted when the game finishes
-        Winner winner;  // decrypted winner, for convenience when UI is checking the game state
+        Winner winner; // decrypted winner, for convenience when UI is checking the game state
     }
 
     struct Move {
@@ -351,7 +351,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     function canSubmitMove(uint256 _gameId, address _player) external view returns (bool canSubmit) {
         Game memory game = games[_gameId];
         if (game.player2 == address(0)) return false; // waiting for player 2
-        if (game.winner != Winner.None) return false;   // game already finished
+        if (game.winner != Winner.None) return false; // game already finished
         if (_player != game.player1 && _player != game.player2) return false;
         return !nextMoves[_gameId][_player].isSubmitted;
     }
@@ -450,10 +450,7 @@ contract SimPhanToe is ZamaEthereumConfig {
             // check each row if it's complete
             ebool rowComplete = FHE.and(
                 FHE.and(
-                    FHE.and(
-                        FHE.eq(_board[i][0], _board[i][1]),
-                        FHE.eq(_board[i][1], _board[i][2])
-                    ),
+                    FHE.and(FHE.eq(_board[i][0], _board[i][1]), FHE.eq(_board[i][1], _board[i][2])),
                     FHE.eq(_board[i][2], _board[i][3])
                 ),
                 FHE.ne(_board[i][0], CELL_EMPTY)
@@ -484,10 +481,7 @@ contract SimPhanToe is ZamaEthereumConfig {
             // check each column if it's complete
             ebool columnComplete = FHE.and(
                 FHE.and(
-                    FHE.and(
-                        FHE.eq(_board[0][i], _board[1][i]),
-                        FHE.eq(_board[1][i], _board[2][i])
-                    ),
+                    FHE.and(FHE.eq(_board[0][i], _board[1][i]), FHE.eq(_board[1][i], _board[2][i])),
                     FHE.eq(_board[2][i], _board[3][i])
                 ),
                 FHE.ne(_board[0][i], CELL_EMPTY)
@@ -516,20 +510,14 @@ contract SimPhanToe is ZamaEthereumConfig {
         // check if any diagonal is complete
         ebool mainDiagonalEqual = FHE.and(
             FHE.and(
-                FHE.and(
-                    FHE.eq(_board[0][0], _board[1][1]),
-                    FHE.eq(_board[1][1], _board[2][2])
-                ),
+                FHE.and(FHE.eq(_board[0][0], _board[1][1]), FHE.eq(_board[1][1], _board[2][2])),
                 FHE.eq(_board[2][2], _board[3][3])
             ),
             FHE.ne(_board[0][0], CELL_EMPTY)
         );
         ebool antiDiagonalEqual = FHE.and(
             FHE.and(
-                FHE.and(
-                    FHE.eq(_board[0][3], _board[1][2]),
-                    FHE.eq(_board[1][2], _board[2][1])
-                ),
+                FHE.and(FHE.eq(_board[0][3], _board[1][2]), FHE.eq(_board[1][2], _board[2][1])),
                 FHE.eq(_board[2][1], _board[3][0])
             ),
             FHE.ne(_board[0][3], CELL_EMPTY)
@@ -551,11 +539,7 @@ contract SimPhanToe is ZamaEthereumConfig {
             isDraw,
             WINNER_DRAW,
             // if main is winner, return main, otherwise return anti (it's either a winner or none)
-            FHE.select(
-                FHE.ne(mainDiagonalWinner, WINNER_NONE),
-                mainDiagonalWinner,
-                antiDiagonalWinner
-            )
+            FHE.select(FHE.ne(mainDiagonalWinner, WINNER_NONE), mainDiagonalWinner, antiDiagonalWinner)
         );
         return winner;
     }
