@@ -180,21 +180,50 @@ export function GameOverNotification({
   winner, 
   isPlayer1, 
   onNewGame, 
-  onBackToLobby 
+  onBackToLobby,
+  onClose,
+  boardRevealed = false,
+  onRevealBoard
 }: { 
   winner: 'player1' | 'player2' | 'draw'
   isPlayer1: boolean
   onNewGame: () => void
   onBackToLobby: () => void
+  onClose?: () => void
+  boardRevealed?: boolean
+  onRevealBoard?: () => void
 }) {
   const didWin = (winner === 'player1' && isPlayer1) || (winner === 'player2' && !isPlayer1)
   const isDraw = winner === 'draw'
 
+  // Handle click on backdrop
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && onClose) {
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className={`glass p-8 max-w-md text-center animate-bounce-in ${
+    <div 
+      className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm animate-fade-in"
+      onClick={handleBackdropClick}
+    >
+      <div className={`glass p-8 max-w-md text-center animate-bounce-in relative ${
         isDraw ? 'border-gray-500/30' : didWin ? 'border-green-500/30' : 'border-red-500/30'
       }`}>
+        {/* Close button */}
+        {onClose && (
+          <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+
         <div className={`w-24 h-24 mx-auto mb-4 rounded-full flex items-center justify-center ${
           isDraw ? 'bg-gray-500/20' : didWin ? 'bg-green-500/20' : 'bg-red-500/20'
         }`}>
@@ -221,18 +250,47 @@ export function GameOverNotification({
               : 'The phantom got you this time. Try again!'}
         </p>
 
-        {/* Reveal note */}
+        {/* Board reveal status */}
         <div className="glass-darker p-3 mb-6 text-xs text-gray-500">
-          <p className="flex items-center justify-center gap-2">
-            <svg className="w-4 h-4 text-cyber-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-            </svg>
-            The board remains encrypted — true phantom gameplay!
-          </p>
+          {boardRevealed ? (
+            <p className="flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              The board has been revealed — check out all the moves!
+            </p>
+          ) : (
+            <div>
+              <p className="flex items-center justify-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-cyber-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                </svg>
+                The board can now be decrypted and revealed!
+              </p>
+              {onRevealBoard && (
+                <button 
+                  onClick={onRevealBoard}
+                  className="text-cyber-purple hover:text-cyber-pink transition-colors underline"
+                >
+                  Click to reveal the full board
+                </button>
+              )}
+            </div>
+          )}
         </div>
         
-        <div className="flex gap-3 justify-center">
+        <div className="flex gap-3 justify-center flex-wrap">
+          {onClose && boardRevealed && (
+            <button onClick={onClose} className="btn-secondary flex items-center gap-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              View Board
+            </button>
+          )}
           <button onClick={onBackToLobby} className="btn-secondary">
             Back to Lobby
           </button>
@@ -244,4 +302,3 @@ export function GameOverNotification({
     </div>
   )
 }
-

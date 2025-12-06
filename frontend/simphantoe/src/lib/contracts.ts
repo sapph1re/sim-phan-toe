@@ -61,6 +61,11 @@ export const SIMPHANTOE_ABI = [
       { name: "winner", type: "uint8", indexed: false },
     ],
   },
+  {
+    type: "event",
+    name: "BoardRevealed",
+    inputs: [{ name: "gameId", type: "uint256", indexed: true }],
+  },
   // Read functions
   {
     type: "function",
@@ -77,11 +82,12 @@ export const SIMPHANTOE_ABI = [
       { name: "gameId", type: "uint256" },
       { name: "player1", type: "address" },
       { name: "player2", type: "address" },
-      // Note: board is euint8[3][3] - encrypted, returned as bytes32[3][3] handles
-      { name: "board", type: "bytes32[3][3]" },
-      { name: "winner", type: "bytes32" }, // euint8 handle
-      { name: "collision", type: "bytes32" }, // ebool handle
-      { name: "isFinished", type: "bool" },
+      // Note: eBoard is euint8[4][4] - encrypted, returned as bytes32[4][4] handles
+      { name: "eBoard", type: "bytes32[4][4]" },
+      { name: "eWinner", type: "bytes32" }, // euint8 handle
+      { name: "eCollision", type: "bytes32" }, // ebool handle
+      { name: "board", type: "uint8[4][4]" }, // cleartext board (revealed after game ends)
+      { name: "winner", type: "uint8" }, // cleartext winner enum
     ],
     stateMutability: "view",
   },
@@ -97,10 +103,11 @@ export const SIMPHANTOE_ABI = [
           { name: "gameId", type: "uint256" },
           { name: "player1", type: "address" },
           { name: "player2", type: "address" },
-          { name: "board", type: "bytes32[3][3]" }, // Encrypted cell handles
-          { name: "winner", type: "bytes32" }, // euint8 handle
-          { name: "collision", type: "bytes32" }, // ebool handle
-          { name: "isFinished", type: "bool" },
+          { name: "eBoard", type: "bytes32[4][4]" }, // Encrypted cell handles
+          { name: "eWinner", type: "bytes32" }, // euint8 handle
+          { name: "eCollision", type: "bytes32" }, // ebool handle
+          { name: "board", type: "uint8[4][4]" }, // cleartext board
+          { name: "winner", type: "uint8" }, // cleartext winner enum
         ],
       },
     ],
@@ -230,6 +237,17 @@ export const SIMPHANTOE_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
+  {
+    type: "function",
+    name: "revealBoard",
+    inputs: [
+      { name: "_gameId", type: "uint256" },
+      { name: "_board", type: "uint8[4][4]" },
+      { name: "_decryptionProof", type: "bytes" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 // Contract address - set via VITE_SIMPHANTOE_ADDRESS environment variable after deploying to Sepolia
@@ -256,11 +274,13 @@ export interface Game {
   gameId: bigint;
   player1: `0x${string}`;
   player2: `0x${string}`;
-  // Board is encrypted - we store handles, not actual values
-  board: readonly (readonly `0x${string}`[])[];
-  winner: `0x${string}`; // Handle to encrypted winner
-  collision: `0x${string}`; // Handle to encrypted collision flag
-  isFinished: boolean;
+  // Encrypted board - we store handles, not actual values
+  eBoard: readonly (readonly `0x${string}`[])[];
+  eWinner: `0x${string}`; // Handle to encrypted winner
+  eCollision: `0x${string}`; // Handle to encrypted collision flag
+  // Cleartext board (revealed after game ends)
+  board: readonly (readonly number[])[];
+  winner: number; // Cleartext winner enum
 }
 
 // Move type for SimPhanToe
@@ -293,6 +313,7 @@ export enum GamePhase {
   ProcessingMoves = "processing_moves",
   DecryptingResult = "decrypting_result",
   FinalizingGameState = "finalizing_game_state",
+  RevealingBoard = "revealing_board",
   RoundComplete = "round_complete",
   GameOver = "game_over",
 }
@@ -302,4 +323,21 @@ export interface FHEOperationStatus {
   type: "encrypt" | "decrypt" | "idle";
   message: string;
   isLoading: boolean;
+}
+
+// Helper to check if game is finished
+export function isGameFinished(game: Game | undefined): boolean {
+  return game !== undefined && game.winner !== Winner.None;
+}
+
+// Helper to check if board is revealed (any non-zero cell in cleartext board)
+export function isBoardRevealed(game: Game | undefined): boolean {
+  if (!game || game.winner === Winner.None) return false;
+  // Check if any cell in the cleartext board has been set
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      if (game.board[i][j] !== 0) return true;
+    }
+  }
+  return false;
 }

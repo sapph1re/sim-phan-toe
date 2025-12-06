@@ -10,6 +10,8 @@ import {
   type LocalMove,
   GamePhase,
   Winner,
+  isGameFinished,
+  isBoardRevealed,
 } from "../lib/contracts";
 import { useFHE, useEncryptMove, usePublicDecrypt, RelayerError } from "../lib/fhe";
 
@@ -335,12 +337,71 @@ export function useFinalizeGameState() {
   };
 }
 
+// Hook to reveal the board after game ends
+export function useRevealBoard() {
+  const { address: contractAddress } = useContractAddress();
+  const { writeContractAsync, isPending, error } = useWriteContract();
+  const { decrypt, isDecrypting, error: decryptError } = usePublicDecrypt();
+  const publicClient = usePublicClient();
+  const queryClient = useQueryClient();
+
+  const revealBoard = useCallback(
+    async (gameId: bigint, eBoard: readonly (readonly `0x${string}`[])[]) => {
+      if (!contractAddress) throw new Error("Contract not configured");
+
+      // Step 1: Collect all 16 board cell handles
+      const boardHandles: `0x${string}`[] = [];
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+          boardHandles.push(eBoard[i][j]);
+        }
+      }
+
+      // Step 2: Decrypt all board cells
+      const decrypted = await decrypt(boardHandles);
+      if (!decrypted) throw new Error("Failed to decrypt board");
+
+      // Step 3: Build the board array from decrypted values
+      const board: number[][] = [];
+      for (let i = 0; i < 4; i++) {
+        board[i] = [];
+        for (let j = 0; j < 4; j++) {
+          const handle = eBoard[i][j];
+          board[i][j] = Number(decrypted.clearValues[handle] as bigint);
+        }
+      }
+
+      // Step 4: Call revealBoard with decrypted board and proof
+      const txHash = await writeContractAsync({
+        address: contractAddress,
+        abi: SIMPHANTOE_ABI,
+        functionName: "revealBoard",
+        args: [gameId, board as [[number, number, number, number], [number, number, number, number], [number, number, number, number], [number, number, number, number]], decrypted.decryptionProof],
+      });
+
+      // Step 5: Wait for transaction to be mined
+      await publicClient?.waitForTransactionReceipt({ hash: txHash });
+
+      queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      return { txHash, board };
+    },
+    [contractAddress, decrypt, writeContractAsync, publicClient, queryClient],
+  );
+
+  return {
+    revealBoard,
+    isPending: isDecrypting || isPending,
+    isDecrypting,
+    error: decryptError || error,
+  };
+}
+
 // Hook to watch for game events
 export function useGameEvents(gameId: bigint | undefined) {
   const { address } = useContractAddress();
   const queryClient = useQueryClient();
   const [lastEvent, setLastEvent] = useState<{
-    type: "submitted" | "invalid" | "made" | "processed" | "collision" | "updated" | "joined";
+    type: "submitted" | "invalid" | "made" | "processed" | "collision" | "updated" | "joined" | "revealed";
     data: unknown;
   } | null>(null);
 
@@ -442,6 +503,20 @@ export function useGameEvents(gameId: bigint | undefined) {
     enabled: !!address && gameId !== undefined,
   });
 
+  useWatchContractEvent({
+    address,
+    abi: SIMPHANTOE_ABI,
+    eventName: "BoardRevealed",
+    onLogs: (logs) => {
+      const relevant = logs.find((log) => log.args.gameId === gameId);
+      if (relevant) {
+        setLastEvent({ type: "revealed", data: relevant.args });
+        queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      }
+    },
+    enabled: !!address && gameId !== undefined,
+  });
+
   return { lastEvent, clearEvent: () => setLastEvent(null) };
 }
 
@@ -482,7 +557,7 @@ export function useCurrentPlayerGameState(gameId: bigint | undefined) {
 
     if (waitingForOpponent) {
       setGamePhase(GamePhase.WaitingForOpponent);
-    } else if (game.isFinished) {
+    } else if (isGameFinished(game)) {
       setGamePhase(GamePhase.GameOver);
     } else if (!myMoveSubmitted) {
       setGamePhase(GamePhase.SelectingMove);
@@ -566,6 +641,7 @@ export function useGameFlow(gameId: bigint | undefined) {
   const { submitMove, isPending: isSubmitting, isEncrypting } = useSubmitMove();
   const { finalizeMove, isPending: isFinalizing, isDecrypting: isDecryptingMove } = useFinalizeMove();
   const { finalizeGameState, isPending: isFinalizingState, isDecrypting: isDecryptingState } = useFinalizeGameState();
+  const { revealBoard, isPending: isRevealingBoard, isDecrypting: isDecryptingBoard } = useRevealBoard();
   const { lastEvent, clearEvent } = useGameEvents(gameId);
 
   const [fheStatus, setFheStatus] = useState<{
@@ -580,10 +656,12 @@ export function useGameFlow(gameId: bigint | undefined) {
   const [lastWinner, setLastWinner] = useState<Winner>(Winner.None);
   const [canRetry, setCanRetry] = useState(false);
   const [pendingRetryAction, setPendingRetryAction] = useState<(() => Promise<void>) | null>(null);
+  const [boardRevealed, setBoardRevealed] = useState(false);
 
   // Track if we need to auto-finalize
   const needsFinalizeMoveRef = useRef(false);
   const needsFinalizeGameRef = useRef(false);
+  const needsRevealBoardRef = useRef(false);
 
   // Track handles we've already processed to avoid using stale handles
   const processedHandlesRef = useRef<Set<string>>(new Set());
@@ -593,6 +671,13 @@ export function useGameFlow(gameId: bigint | undefined) {
 
   // Track when MovesProcessed event fires - this is when we need to finalize game state
   const [movesProcessedPending, setMovesProcessedPending] = useState(false);
+
+  // Check if board is already revealed on mount
+  useEffect(() => {
+    if (gameState.game && isBoardRevealed(gameState.game)) {
+      setBoardRevealed(true);
+    }
+  }, [gameState.game]);
 
   // Handle submitting a move
   const handleSubmitMove = useCallback(async () => {
@@ -666,12 +751,12 @@ export function useGameFlow(gameId: bigint | undefined) {
           setTimeout(async () => {
             try {
               const result = await gameState.refetchGame();
-              const freshGame = result.data;
+              const freshGame = result.data as Game | undefined;
 
-              // If winner/collision handles are set, trigger game finalization
+              // If eWinner handle is set, trigger game finalization
               if (
-                freshGame?.winner &&
-                freshGame.winner !== "0x0000000000000000000000000000000000000000000000000000000000000000"
+                freshGame?.eWinner &&
+                freshGame.eWinner !== "0x0000000000000000000000000000000000000000000000000000000000000000"
               ) {
                 setMovesProcessedPending(true);
               }
@@ -741,13 +826,17 @@ export function useGameFlow(gameId: bigint | undefined) {
         }
 
         // Don't process if game is already finished
-        if (freshGame.isFinished) {
+        if (isGameFinished(freshGame)) {
           needsFinalizeGameRef.current = false;
+          // Check if board needs revealing
+          if (!isBoardRevealed(freshGame)) {
+            needsRevealBoardRef.current = true;
+          }
           return;
         }
 
-        const winnerHandle = freshGame.winner;
-        const collisionHandle = freshGame.collision;
+        const winnerHandle = freshGame.eWinner;
+        const collisionHandle = freshGame.eCollision;
 
         if (!winnerHandle || winnerHandle === "0x0000000000000000000000000000000000000000000000000000000000000000") {
           needsFinalizeGameRef.current = false;
@@ -776,6 +865,8 @@ export function useGameFlow(gameId: bigint | undefined) {
           if (winner !== Winner.None) {
             setLastWinner(winner);
             setShowGameOver(true);
+            // Trigger board reveal
+            needsRevealBoardRef.current = true;
           }
           setFheStatus(null);
         }
@@ -822,6 +913,59 @@ export function useGameFlow(gameId: bigint | undefined) {
     autoFinalizeGame();
   }, [gameId, movesProcessedPending, gameState, finalizeGameState, queryClient]);
 
+  // Auto-reveal board when game finishes
+  useEffect(() => {
+    async function autoRevealBoard() {
+      if (!needsRevealBoardRef.current) return;
+      if (gameId === undefined) return;
+      if (!gameState.game) return;
+      if (!isGameFinished(gameState.game)) return;
+      if (isBoardRevealed(gameState.game)) {
+        setBoardRevealed(true);
+        needsRevealBoardRef.current = false;
+        return;
+      }
+
+      needsRevealBoardRef.current = false;
+
+      try {
+        setFheStatus({ type: "decrypt", message: "Revealing board..." });
+        await revealBoard(gameId, gameState.game.eBoard);
+        setBoardRevealed(true);
+        setFheStatus(null);
+
+        // Refetch to get the revealed board
+        await gameState.refetchGame();
+      } catch (error) {
+        console.error("Failed to reveal board:", error);
+        
+        // Handle RelayerError with detailed information
+        if (error instanceof RelayerError) {
+          setFheStatus({
+            type: "relayer_error",
+            message: error.message,
+            errorDetails: error.getDisplayMessage(),
+            statusCode: error.statusCode,
+            relayerMessage: error.relayerMessage,
+          });
+        } else {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          setFheStatus({
+            type: "error",
+            message: "Failed to reveal board",
+            errorDetails: errorMessage,
+          });
+        }
+        setCanRetry(true);
+        setPendingRetryAction(() => async () => {
+          needsRevealBoardRef.current = true;
+        });
+      }
+    }
+
+    autoRevealBoard();
+  }, [gameId, gameState.game, revealBoard, gameState.refetchGame]);
+
   // Handle events
   useEffect(() => {
     if (!lastEvent) return;
@@ -846,7 +990,13 @@ export function useGameFlow(gameId: bigint | undefined) {
         if (data.winner !== Winner.None) {
           setLastWinner(data.winner);
           setShowGameOver(true);
+          // Trigger board reveal
+          needsRevealBoardRef.current = true;
         }
+        break;
+      case "revealed":
+        setBoardRevealed(true);
+        gameState.refetchGame();
         break;
       case "joined":
         gameState.refetchGame();
@@ -873,14 +1023,14 @@ export function useGameFlow(gameId: bigint | undefined) {
   // Detect if game needs finalization (has handles AND both moves are finalized)
   const needsGameFinalization = useMemo(() => {
     if (!gameState.game) return false;
-    if (gameState.game.isFinished) return false;
+    if (isGameFinished(gameState.game)) return false;
 
     // Both moves must be "made" (finalized and valid) for processMoves to have run
     // After finalizeGameState, moves are deleted so this will be false
     const bothMovesReady = gameState.myMoveMade && gameState.opponentMoveMade;
     if (!bothMovesReady) return false;
 
-    const winnerHandle = gameState.game.winner;
+    const winnerHandle = gameState.game.eWinner;
     // Check if winner handle is set (non-zero means processMoves has run)
     return winnerHandle && winnerHandle !== "0x0000000000000000000000000000000000000000000000000000000000000000";
   }, [gameState.game, gameState.myMoveMade, gameState.opponentMoveMade]);
@@ -893,6 +1043,11 @@ export function useGameFlow(gameId: bigint | undefined) {
     setMovesProcessedPending(true);
   }, []);
 
+  // Manual trigger for board reveal
+  const handleRevealBoard = useCallback(() => {
+    needsRevealBoardRef.current = true;
+  }, []);
+
   return {
     ...gameState,
 
@@ -900,6 +1055,7 @@ export function useGameFlow(gameId: bigint | undefined) {
     handleSubmitMove,
     handleRetry,
     handleFinalizeGame,
+    handleRevealBoard,
 
     // FHE status
     fheStatus,
@@ -911,6 +1067,8 @@ export function useGameFlow(gameId: bigint | undefined) {
     isFinalizing,
     isDecryptingState,
     isFinalizingState,
+    isRevealingBoard,
+    isDecryptingBoard,
 
     // UI state
     showCollision,
@@ -918,5 +1076,6 @@ export function useGameFlow(gameId: bigint | undefined) {
     showGameOver,
     setShowGameOver,
     lastWinner,
+    boardRevealed,
   };
 }

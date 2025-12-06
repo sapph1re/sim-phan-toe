@@ -4,7 +4,7 @@ import { GameBoard } from "./GameBoard";
 import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
 import { FHEStatus } from "./FHEStatus";
 import { useGameFlow, useStartGame } from "../hooks/useSimPhanToe";
-import { Winner } from "../lib/contracts";
+import { Winner, isGameFinished } from "../lib/contracts";
 
 interface GameViewProps {
   gameId: bigint;
@@ -32,6 +32,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
     handleSubmitMove,
     handleRetry,
     handleFinalizeGame,
+    handleRevealBoard,
     fheStatus,
     canRetry,
     needsGameFinalization,
@@ -41,10 +42,14 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
     isFinalizing,
     isDecryptingState,
     isFinalizingState,
+    isRevealingBoard,
+    isDecryptingBoard,
     showCollision,
     setShowCollision,
     showGameOver,
+    setShowGameOver,
     lastWinner,
+    boardRevealed: boardIsRevealed,
   } = useGameFlow(gameId);
 
   const { startGame } = useStartGame();
@@ -68,7 +73,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
       setIsPendingSubmit(true);
     });
     // Yield to browser event loop to allow paint before heavy FHE work starts
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     try {
       await handleSubmitMove();
     } catch (error) {
@@ -94,7 +99,15 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
 
   // Determine if any FHE operation is in progress
   const isFHEOperating =
-    isPendingSubmit || isEncrypting || isSubmitting || isDecryptingMove || isFinalizing || isDecryptingState || isFinalizingState;
+    isPendingSubmit ||
+    isEncrypting ||
+    isSubmitting ||
+    isDecryptingMove ||
+    isFinalizing ||
+    isDecryptingState ||
+    isFinalizingState ||
+    isRevealingBoard ||
+    isDecryptingBoard;
 
   // When user becomes a player (join transaction confirmed), notify parent
   useEffect(() => {
@@ -148,9 +161,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
           <div className="glass p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 border-4 border-cyber-purple/30 border-t-cyber-purple rounded-full animate-spin" />
             <h2 className="font-display text-2xl font-bold mb-4">Joining Game...</h2>
-            <p className="text-gray-500 mb-6">
-              Waiting for your join transaction to be confirmed on the blockchain.
-            </p>
+            <p className="text-gray-500 mb-6">Waiting for your join transaction to be confirmed on the blockchain.</p>
           </div>
         </div>
       );
@@ -175,8 +186,19 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
     );
   }
 
-  const isGameOver = game.isFinished;
+  const isGameOver = isGameFinished(game);
   const winnerType = lastWinner === Winner.Player1 ? "player1" : lastWinner === Winner.Player2 ? "player2" : "draw";
+
+  // Determine user's result for finished games
+  const getUserResult = () => {
+    if (!isGameOver || game.winner === Winner.None) return null;
+    if (game.winner === Winner.Draw) return "draw";
+    if ((game.winner === Winner.Player1 && isPlayer1) || (game.winner === Winner.Player2 && !isPlayer1)) {
+      return "won";
+    }
+    return "lost";
+  };
+  const userResult = getUserResult();
 
   return (
     <div className="animate-fade-in">
@@ -200,7 +222,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            {isFHEOperating ? "Processing..." : "Encrypted"}
+            {isFHEOperating ? "Processing..." : boardIsRevealed ? "Revealed" : "Encrypted"}
           </div>
           <div className="font-display text-xl">
             <span className="text-gray-500">Phantom</span>
@@ -208,6 +230,39 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
           </div>
         </div>
       </div>
+
+      {/* Winner Banner for finished games */}
+      {isGameOver && userResult && (
+        <div
+          className={`mb-6 p-4 rounded-xl text-center ${
+            userResult === "won"
+              ? "bg-green-500/20 border border-green-500/30"
+              : userResult === "lost"
+                ? "bg-red-500/20 border border-red-500/30"
+                : "bg-gray-500/20 border border-gray-500/30"
+          }`}
+        >
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-3xl">{userResult === "won" ? "🏆" : userResult === "lost" ? "👻" : "🤝"}</span>
+            <div>
+              <h3
+                className={`font-display text-xl font-bold ${
+                  userResult === "won" ? "text-green-500" : userResult === "lost" ? "text-red-500" : "text-gray-400"
+                }`}
+              >
+                {userResult === "won" ? "Victory!" : userResult === "lost" ? "Defeat" : "It's a Draw!"}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {userResult === "won"
+                  ? "You outmaneuvered your opponent in the fog of war!"
+                  : userResult === "lost"
+                    ? "The phantom got you this time."
+                    : "Both players achieved victory simultaneously!"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-8 items-start">
         {/* Game Board */}
@@ -220,6 +275,8 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
             isPlayer1={isPlayer1}
             collisionCell={collisionCell}
             isLoading={isFHEOperating}
+            revealedBoard={boardIsRevealed ? game.board : null}
+            isRevealed={boardIsRevealed}
           />
 
           {/* Submit button */}
@@ -263,6 +320,22 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
               </button>
             </div>
           )}
+
+          {/* Reveal Board button for finished games where board isn't revealed yet */}
+          {isGameOver && !boardIsRevealed && !isRevealingBoard && !isDecryptingBoard && (
+            <div className="mt-6 w-full max-w-xs">
+              <button
+                onClick={handleRevealBoard}
+                className="w-full btn-secondary py-3 text-base flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Reveal Board
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Game Info Panel */}
@@ -271,8 +344,8 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
           <FHEStatus
             status={fheStatus}
             isEncrypting={isEncrypting}
-            isDecrypting={isDecryptingMove || isDecryptingState}
-            isSubmitting={isSubmitting || isFinalizing || isFinalizingState}
+            isDecrypting={isDecryptingMove || isDecryptingState || isDecryptingBoard}
+            isSubmitting={isSubmitting || isFinalizing || isFinalizingState || isRevealingBoard}
             canRetry={canRetry}
             onRetry={handleRetry}
           />
@@ -317,15 +390,17 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
           )}
 
           {/* Move Status */}
-          <MoveIndicator
-            myMoveSubmitted={myMoveSubmitted}
-            myMoveMade={myMoveMade}
-            opponentMoveSubmitted={opponentMoveSubmitted}
-            opponentMoveMade={opponentMoveMade}
-            isPlayer1={isPlayer1}
-            waitingForOpponent={waitingForOpponent}
-            gamePhase={gamePhase}
-          />
+          {!isGameOver && (
+            <MoveIndicator
+              myMoveSubmitted={myMoveSubmitted}
+              myMoveMade={myMoveMade}
+              opponentMoveSubmitted={opponentMoveSubmitted}
+              opponentMoveMade={opponentMoveMade}
+              isPlayer1={isPlayer1}
+              waitingForOpponent={waitingForOpponent}
+              gamePhase={gamePhase}
+            />
+          )}
 
           {/* Game Info */}
           <div className="card">
@@ -357,19 +432,51 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Your Known Moves</span>
-                <span>{myLocalMoves.length}/5 max</span>
+                <span className="text-gray-500">Your Moves</span>
+                <span>{myLocalMoves.length}/8 max</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Board State</span>
-                <span className="text-cyber-purple flex items-center gap-1">
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                  Encrypted
+                <span className={boardIsRevealed ? "text-green-500" : "text-cyber-purple"}>
+                  {boardIsRevealed ? (
+                    <span className="flex items-center gap-1">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      Revealed
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      Encrypted
+                    </span>
+                  )}
                 </span>
               </div>
+              {isGameOver && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Winner</span>
+                  <span
+                    className={`font-semibold ${
+                      game.winner === Winner.Draw
+                        ? "text-gray-400"
+                        : game.winner === Winner.Player1
+                          ? "text-cyber-purple"
+                          : "text-cyber-cyan"
+                    }`}
+                  >
+                    {game.winner === Winner.Draw
+                      ? "Draw"
+                      : game.winner === Winner.Player1
+                        ? "Player 1 ✕"
+                        : "Player 2 ○"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -378,34 +485,57 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
             <h3 className="font-display text-lg font-semibold mb-4">Players</h3>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyber-purple/20 flex items-center justify-center text-cyber-purple font-bold">
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${
+                    isGameOver && game.winner === Winner.Player1
+                      ? "bg-green-500/20 text-green-500"
+                      : "bg-cyber-purple/20 text-cyber-purple"
+                  }`}
+                >
                   ✕
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">Player 1 {isPlayer1 && "(You)"}</p>
+                  <p className="text-xs text-gray-500">
+                    Player 1 {isPlayer1 && "(You)"}
+                    {isGameOver && game.winner === Winner.Player1 && (
+                      <span className="ml-2 text-green-500">Winner!</span>
+                    )}
+                  </p>
                   <p className="font-mono text-sm truncate">{game.player1}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyber-cyan/20 flex items-center justify-center text-cyber-cyan font-bold relative">
-                  ○{/* Lock overlay for opponent */}
-                  {!isPlayer1 || waitingForOpponent ? null : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-cyber-darker/50 rounded-lg">
-                      <svg
-                        className="w-4 h-4 text-gray-500"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                    </div>
-                  )}
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold relative ${
+                    isGameOver && game.winner === Winner.Player2
+                      ? "bg-green-500/20 text-green-500"
+                      : "bg-cyber-cyan/20 text-cyber-cyan"
+                  }`}
+                >
+                  ○{/* Lock overlay for opponent (only when game not revealed) */}
+                  {!boardIsRevealed &&
+                    (!isPlayer1 || waitingForOpponent ? null : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-cyber-darker/50 rounded-lg">
+                        <svg
+                          className="w-4 h-4 text-gray-500"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                      </div>
+                    ))}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">Player 2 {!isPlayer1 && isPlayer && "(You)"}</p>
+                  <p className="text-xs text-gray-500">
+                    Player 2 {!isPlayer1 && isPlayer && "(You)"}
+                    {isGameOver && game.winner === Winner.Player2 && (
+                      <span className="ml-2 text-green-500">Winner!</span>
+                    )}
+                  </p>
                   <p className="font-mono text-sm truncate">{waitingForOpponent ? "Waiting..." : game.player2}</p>
                 </div>
               </div>
@@ -421,6 +551,15 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
               </p>
             </div>
           )}
+
+          {/* Board revealed info */}
+          {isGameOver && boardIsRevealed && (
+            <div className="glass-darker p-4">
+              <p className="text-xs text-gray-500">
+                🔓 <strong>Board Revealed:</strong> The full board is now visible showing all moves from both players.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -433,6 +572,9 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
           isPlayer1={isPlayer1}
           onNewGame={handleNewGame}
           onBackToLobby={onBack}
+          onClose={() => setShowGameOver(false)}
+          boardRevealed={boardIsRevealed}
+          onRevealBoard={!boardIsRevealed ? handleRevealBoard : undefined}
         />
       )}
     </div>
