@@ -5,6 +5,9 @@ tmp
 # frontend (has its own eslint config)
 frontend
 
+# agent (has its own tsconfig)
+agent
+
 # scripts (not in root tsconfig)
 scripts
 
