@@ -154,6 +154,131 @@ program
     }
   });
 
+// Resume an active game (auto-detect)
+program
+  .command("resume")
+  .description("Resume playing an active game (auto-detects which game to continue)")
+  .action(async () => {
+    try {
+      const contract = getContractService();
+      const playerAddress = contract.address;
+
+      logger.info("Checking for active games...");
+
+      const gameIds = await contract.getGamesByPlayer(playerAddress);
+
+      if (gameIds.length === 0) {
+        logger.info("No games found. Use 'create-game' to start a new one.");
+        return;
+      }
+
+      // Categorize games
+      const activeGames: { gameId: bigint; status: string; priority: number }[] = [];
+
+      for (const gameId of gameIds) {
+        const game = await contract.getGame(gameId);
+
+        if (game.winner !== Winner.None) {
+          // Game is finished, skip
+          continue;
+        }
+
+        const isWaitingForOpponent = game.player2 === "0x0000000000000000000000000000000000000000";
+
+        if (isWaitingForOpponent) {
+          activeGames.push({
+            gameId,
+            status: "Waiting for opponent",
+            priority: 1, // Lower priority than in-progress games
+          });
+        } else {
+          activeGames.push({
+            gameId,
+            status: "In progress",
+            priority: 2, // Higher priority
+          });
+        }
+      }
+
+      if (activeGames.length === 0) {
+        logger.info("No active games found. All games are finished.");
+        logger.info("Use 'create-game' to start a new one or 'find-game' to join one.");
+        return;
+      }
+
+      // Sort by priority (in-progress first)
+      activeGames.sort((a, b) => b.priority - a.priority);
+
+      logger.info(`Found ${activeGames.length} active game(s):`);
+      for (const game of activeGames) {
+        console.log(`  Game ${game.gameId}: ${game.status}`);
+      }
+
+      // Pick the highest priority game
+      const selectedGame = activeGames[0];
+      logger.info(`Resuming game ${selectedGame.gameId} (${selectedGame.status})...`);
+
+      await playGame(selectedGame.gameId);
+    } catch (error) {
+      logger.error("Failed to resume game", error);
+      process.exit(1);
+    }
+  });
+
+// Auto mode: resume active game or create new one
+program
+  .command("auto")
+  .description("Automatically resume an active game, or create a new one if none exist")
+  .action(async () => {
+    try {
+      const contract = getContractService();
+      const playerAddress = contract.address;
+
+      logger.info("Auto mode: checking for active games...");
+
+      const gameIds = await contract.getGamesByPlayer(playerAddress);
+
+      // Find active games
+      let activeGameId: bigint | null = null;
+      let activeGameStatus: string = "";
+
+      for (const gameId of gameIds) {
+        const game = await contract.getGame(gameId);
+
+        if (game.winner !== Winner.None) {
+          continue; // Skip finished games
+        }
+
+        const isWaitingForOpponent = game.player2 === "0x0000000000000000000000000000000000000000";
+
+        // Prefer in-progress games over waiting games
+        if (!isWaitingForOpponent) {
+          activeGameId = gameId;
+          activeGameStatus = "In progress";
+          break; // In-progress game takes priority
+        } else if (activeGameId === null) {
+          activeGameId = gameId;
+          activeGameStatus = "Waiting for opponent";
+        }
+      }
+
+      if (activeGameId !== null) {
+        logger.info(`Found active game ${activeGameId} (${activeGameStatus})`);
+        logger.info("Resuming game...");
+        await playGame(activeGameId);
+      } else {
+        logger.info("No active games found. Creating a new game...");
+        const { gameId } = await contract.startGame();
+        logger.info(`Game created with ID: ${gameId}`);
+        logger.info("Waiting for an opponent to join...");
+        await playGame(gameId);
+      }
+    } catch (error) {
+      logger.error("Failed in auto mode", error);
+      process.exit(1);
+    }
+  });
+
 // Check game status
 program
   .command("status <gameId>")

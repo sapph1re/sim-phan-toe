@@ -44,31 +44,35 @@ Optional:
 ### Commands
 
 ```bash
+# Auto mode - resume active game or create new one (RECOMMENDED)
+npx tsx src/index.ts auto
+
+# Resume an active game (auto-detects which game to continue)
+npx tsx src/index.ts resume
+
 # Show agent wallet address
 npx tsx src/index.ts wallet
 
 # Check agent's ETH balance
 npx tsx src/index.ts balance
 
-# Find and join an open game
-npm run find-game
-# or: npx tsx src/index.ts find-game
-
-# Join a specific game by ID
-npx tsx src/index.ts join-game <gameId>
-
-# Create a new game and wait for opponent
-npm run create-game
-# or: npx tsx src/index.ts create-game
-
-# Resume playing an existing game
-npx tsx src/index.ts play <gameId>
-
 # List your games
 npx tsx src/index.ts list-games
 
 # Check game status
 npx tsx src/index.ts status <gameId>
+
+# Find and join an open game
+npx tsx src/index.ts find-game
+
+# Join a specific game by ID
+npx tsx src/index.ts join-game <gameId>
+
+# Create a new game and wait for opponent
+npx tsx src/index.ts create-game
+
+# Resume playing a specific game by ID
+npx tsx src/index.ts play <gameId>
 ```
 
 ### Example Session

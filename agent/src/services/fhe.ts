@@ -132,46 +132,25 @@ export class FHEService {
     logger.info("Initializing FHE SDK...");
 
     try {
-      // Dynamic import of the SDK (use any to avoid TS module resolution issues)
-      const sdk: FHEModule = await import("@zama-fhe/relayer-sdk");
-      const { initSDK, createInstance, SepoliaConfig } = sdk;
+      // Dynamic import of the SDK - use /node subpath for Node.js environment
+      // Note: The /node version doesn't have initSDK - WASM is handled internally
+      const sdk: FHEModule = await import("@zama-fhe/relayer-sdk/node");
+      const { createInstance, SepoliaConfig } = sdk;
 
-      // Initialize WASM with threading disabled for Node.js compatibility
-      await initSDK({ thread: 0 });
-      logger.debug("FHE SDK WASM loaded");
+      // Get RPC URL for network communication
+      const rpcUrl = process.env.SEPOLIA_RPC_URL;
+      if (!rpcUrl) {
+        throw new Error("SEPOLIA_RPC_URL not set");
+      }
 
       // Create instance with Sepolia config
-      // For Node.js, we need to provide a network adapter
+      // For Node.js, pass the RPC URL as a string (the SDK accepts string | Eip1193Provider)
       const config = {
         ...SepoliaConfig,
-        network: {
-          request: async ({ method, params }: { method: string; params?: unknown[] }) => {
-            // Use viem's HTTP transport for RPC calls
-            const rpcUrl = process.env.SEPOLIA_RPC_URL;
-            if (!rpcUrl) {
-              throw new Error("SEPOLIA_RPC_URL not set");
-            }
-
-            const response = await fetch(rpcUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: Date.now(),
-                method,
-                params,
-              }),
-            });
-
-            const data = (await response.json()) as { error?: { message: string }; result?: unknown };
-            if (data.error) {
-              throw new Error(data.error.message);
-            }
-            return data.result;
-          },
-        },
+        network: rpcUrl,
       };
 
+      logger.debug("Creating FHE instance with config", { rpcUrl: rpcUrl.substring(0, 30) + "..." });
       this.instance = await createInstance(config);
       logger.info("FHE SDK initialized successfully");
     } catch (error) {
