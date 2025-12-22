@@ -1,12 +1,7 @@
-# Netlify headers file (backup to netlify.toml)
-# CRITICAL: These headers enable SharedArrayBuffer for FHE WASM
-
-/*
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
+# Netlify headers file
+# Note: COOP/COEP headers are NOT set because:
+# 1. FHE SDK uses thread: 0 (single-threaded mode, no SharedArrayBuffer needed)
+# 2. Privy embedded wallets require iframes that break with strict COOP/COEP
 
 /*.wasm
   Content-Type: application/wasm
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
-
