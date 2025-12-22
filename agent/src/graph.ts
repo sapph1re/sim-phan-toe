@@ -1,0 +1,173 @@
+// LangGraph state machine definition for SimPhanToe agent
+
+import { StateGraph, END } from "@langchain/langgraph";
+import { createLogger } from "./utils/logger.js";
+import { AgentStateAnnotation, type AgentState, GamePhase } from "./state.js";
+import {
+  checkGameState,
+  selectMove,
+  submitMove,
+  finalizeMove,
+  finalizeGameState,
+  revealBoard,
+  waitForOpponent,
+} from "./nodes/index.js";
+
+const logger = createLogger("Graph");
+
+// Maximum retries before giving up
+const MAX_RETRIES = 3;
+
+// Router function to determine next node based on current phase
+function routeFromCheckState(state: AgentState): string {
+  logger.debug("Routing from checkGameState", { phase: state.currentPhase });
+
+  switch (state.currentPhase) {
+    case GamePhase.Idle:
+    case GamePhase.WaitingForOpponent:
+    case GamePhase.WaitingForOpponentMove:
+      return "waitForOpponent";
+
+    case GamePhase.SelectingMove:
+      return "selectMove";
+
+    case GamePhase.SubmittingMove:
+      return "submitMove";
+
+    case GamePhase.FinalizingMove:
+      return "finalizeMove";
+
+    case GamePhase.FinalizingGameState:
+      return "finalizeGameState";
+
+    case GamePhase.RevealingBoard:
+      return "revealBoard";
+
+    case GamePhase.GameComplete:
+      return END;
+
+    case GamePhase.Error:
+      if (state.retryCount < MAX_RETRIES) {
+        logger.warn("Error occurred, retrying...", {
+          retryCount: state.retryCount,
+          error: state.lastError,
+        });
+        return "waitForOpponent"; // Wait and retry
+      }
+      logger.error("Max retries exceeded, ending", { error: state.lastError });
+      return END;
+
+    default:
+      logger.warn("Unknown phase, checking state", { phase: state.currentPhase });
+      return "waitForOpponent";
+  }
+}
+
+// Router after waiting
+function routeAfterWait(_state: AgentState): string {
+  return "checkGameState";
+}
+
+// Router after select move
+function routeAfterSelect(state: AgentState): string {
+  if (state.pendingMove) {
+    return "submitMove";
+  }
+  return "checkGameState";
+}
+
+// Router after submit move
+function routeAfterSubmit(state: AgentState): string {
+  if (state.currentPhase === GamePhase.Error) {
+    return "checkGameState";
+  }
+  return "finalizeMove";
+}
+
+// Router after finalize move
+function routeAfterFinalizeMove(state: AgentState): string {
+  switch (state.currentPhase) {
+    case GamePhase.SelectingMove:
+      // Move was invalid, need to pick again
+      return "selectMove";
+    case GamePhase.Error:
+      return "checkGameState";
+    default:
+      return "checkGameState";
+  }
+}
+
+// Router after finalize game state
+function routeAfterFinalizeGameState(state: AgentState): string {
+  switch (state.currentPhase) {
+    case GamePhase.RevealingBoard:
+      return "revealBoard";
+    case GamePhase.SelectingMove:
+      // Collision or continue playing
+      return "selectMove";
+    case GamePhase.Error:
+      return "checkGameState";
+    default:
+      return "checkGameState";
+  }
+}
+
+// Router after reveal board
+function routeAfterReveal(state: AgentState): string {
+  if (state.currentPhase === GamePhase.GameComplete) {
+    return END;
+  }
+  return "checkGameState";
+}
+
+// Build the graph
+export function buildGraph() {
+  logger.info("Building agent graph...");
+
+  const graph = new StateGraph(AgentStateAnnotation)
+    // Add nodes
+    .addNode("checkGameState", checkGameState)
+    .addNode("waitForOpponent", waitForOpponent)
+    .addNode("selectMove", selectMove)
+    .addNode("submitMove", submitMove)
+    .addNode("finalizeMove", finalizeMove)
+    .addNode("finalizeGameState", finalizeGameState)
+    .addNode("revealBoard", revealBoard)
+
+    // Set entry point
+    .addEdge("__start__", "checkGameState")
+
+    // Add conditional edges from checkGameState
+    .addConditionalEdges("checkGameState", routeFromCheckState, [
+      "waitForOpponent",
+      "selectMove",
+      "submitMove",
+      "finalizeMove",
+      "finalizeGameState",
+      "revealBoard",
+      END,
+    ])
+
+    // Add edges from other nodes
+    .addConditionalEdges("waitForOpponent", routeAfterWait, ["checkGameState"])
+    .addConditionalEdges("selectMove", routeAfterSelect, ["submitMove", "checkGameState"])
+    .addConditionalEdges("submitMove", routeAfterSubmit, ["finalizeMove", "checkGameState"])
+    .addConditionalEdges("finalizeMove", routeAfterFinalizeMove, [
+      "selectMove",
+      "checkGameState",
+    ])
+    .addConditionalEdges("finalizeGameState", routeAfterFinalizeGameState, [
+      "revealBoard",
+      "selectMove",
+      "checkGameState",
+    ])
+    .addConditionalEdges("revealBoard", routeAfterReveal, ["checkGameState", END]);
+
+  logger.info("Graph built successfully");
+
+  return graph.compile();
+}
+
+// Export compiled graph type
+export type CompiledGraph = ReturnType<typeof buildGraph>;
+
