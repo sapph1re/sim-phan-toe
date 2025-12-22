@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useConnectWallet } from "@privy-io/react-auth";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { isPrivyConfigured } from "../lib/privy";
 
@@ -14,7 +14,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Privy hooks - only available when Privy is configured
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const privyHooks = isPrivyConfigured ? usePrivy() : null;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const privyConnectWallet = isPrivyConfigured ? useConnectWallet() : null;
   const { openConnectModal } = useConnectModal();
 
   // Reset state when modal closes
@@ -58,14 +61,21 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   }, [email, privyHooks, onClose]);
 
-  // Handle external wallet connection via RainbowKit
+  // Handle external wallet connection
+  // Uses Privy's wallet connection when configured, otherwise RainbowKit
   const handleConnectWallet = useCallback(() => {
     onClose();
-    // Small delay to allow modal to close before opening RainbowKit modal
-    setTimeout(() => {
-      openConnectModal?.();
-    }, 100);
-  }, [onClose, openConnectModal]);
+    
+    if (isPrivyConfigured && privyConnectWallet) {
+      // Use Privy's connectWallet which properly integrates with their wagmi provider
+      privyConnectWallet.connectWallet();
+    } else {
+      // Fallback to RainbowKit when Privy is not configured
+      setTimeout(() => {
+        openConnectModal?.();
+      }, 100);
+    }
+  }, [onClose, privyConnectWallet, openConnectModal]);
 
   // Handle backdrop click to close
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {

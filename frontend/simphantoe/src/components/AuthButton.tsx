@@ -20,7 +20,9 @@ export function AuthButton() {
   const { disconnect: wagmiDisconnect } = useDisconnect();
 
   // Privy hooks - only use when configured
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const privyHooks = isPrivyConfigured ? usePrivy() : null;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const walletsHooks = isPrivyConfigured ? useWallets() : null;
 
   const isPrivyAuthenticated = privyHooks?.authenticated ?? false;
