@@ -36,12 +36,7 @@ export async function submitMove(state: AgentState): Promise<Partial<AgentState>
 
     // Step 2: Submit to contract
     logger.debug("Submitting encrypted move to contract...");
-    const txHash = await contract.submitMove(
-      gameId,
-      encrypted.handles[0],
-      encrypted.handles[1],
-      encrypted.inputProof
-    );
+    const txHash = await contract.submitMove(gameId, encrypted.handles[0], encrypted.handles[1], encrypted.inputProof);
 
     logger.info("Move submitted successfully", {
       gameId: gameId.toString(),
@@ -65,4 +60,3 @@ export async function submitMove(state: AgentState): Promise<Partial<AgentState>
     };
   }
 }
-

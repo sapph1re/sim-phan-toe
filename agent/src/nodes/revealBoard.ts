@@ -41,10 +41,7 @@ export async function revealBoard(state: AgentState): Promise<Partial<AgentState
     let outcomeMessage: string;
     if (winner === Winner.Draw) {
       outcomeMessage = "Game ended in a DRAW!";
-    } else if (
-      (winner === Winner.Player1 && isPlayer1) ||
-      (winner === Winner.Player2 && !isPlayer1)
-    ) {
+    } else if ((winner === Winner.Player1 && isPlayer1) || (winner === Winner.Player2 && !isPlayer1)) {
       outcomeMessage = "🎉 YOU WON! 🎉";
     } else {
       outcomeMessage = "You lost. Better luck next time!";
@@ -80,9 +77,7 @@ function logBoard(board: number[][], isPlayer1: boolean): void {
   console.log("  ┌───┬───┬───┬───┐");
 
   for (let y = 0; y < 4; y++) {
-    const row = board[y]
-      .map((cell) => ` ${symbols[cell] || "?"} `)
-      .join("│");
+    const row = board[y].map((cell) => ` ${symbols[cell] || "?"} `).join("│");
     console.log(`  │${row}│`);
 
     if (y < 3) {
@@ -93,4 +88,3 @@ function logBoard(board: number[][], isPlayer1: boolean): void {
   console.log("  └───┴───┴───┴───┘");
   console.log(`  (You are ${isPlayer1 ? "X" : "O"})\n`);
 }
-

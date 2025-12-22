@@ -34,7 +34,7 @@ export class RelayerError extends Error {
       statusCode?: number;
       statusText?: string;
       relayerMessage?: string;
-    }
+    },
   ) {
     super(message);
     this.name = "RelayerError";
@@ -231,7 +231,7 @@ export class FHEService {
   // Decrypt winner and collision handles together
   async decryptGameState(
     winnerHandle: `0x${string}`,
-    collisionHandle: `0x${string}`
+    collisionHandle: `0x${string}`,
   ): Promise<{ winner: number; collision: boolean; proof: `0x${string}` }> {
     const result = await this.publicDecrypt([winnerHandle, collisionHandle]);
     return {
@@ -243,7 +243,7 @@ export class FHEService {
 
   // Decrypt entire board (16 cells)
   async decryptBoard(
-    eBoard: readonly (readonly `0x${string}`[])[]
+    eBoard: readonly (readonly `0x${string}`[])[],
   ): Promise<{ board: number[][]; proof: `0x${string}` }> {
     const handles: `0x${string}`[] = [];
     for (let i = 0; i < 4; i++) {
@@ -271,10 +271,6 @@ export class FHEService {
 }
 
 // Factory function to create FHE service
-export function createFHEService(
-  contractAddress: `0x${string}`,
-  playerAddress: `0x${string}`
-): FHEService {
+export function createFHEService(contractAddress: `0x${string}`, playerAddress: `0x${string}`): FHEService {
   return new FHEService(contractAddress, playerAddress);
 }
-

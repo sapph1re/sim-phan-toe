@@ -32,4 +32,3 @@ export async function waitForOpponent(state: AgentState): Promise<Partial<AgentS
     // Just return empty - the router will send us back to checkGameState
   };
 }
-

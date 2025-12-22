@@ -32,4 +32,3 @@ export const privyConfig: PrivyClientConfig = {
   defaultChain: sepolia,
   supportedChains: [sepolia],
 };
-

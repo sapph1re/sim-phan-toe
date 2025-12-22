@@ -34,10 +34,7 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
 
     // Step 1: Decrypt winner and collision
     logger.debug("Decrypting game state...");
-    const { winner, collision, proof } = await fhe.decryptGameState(
-      game.eWinner,
-      game.eCollision
-    );
+    const { winner, collision, proof } = await fhe.decryptGameState(game.eWinner, game.eCollision);
 
     logger.info("Game state decrypted", { winner, collision });
 
@@ -84,4 +81,3 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
     };
   }
 }
-

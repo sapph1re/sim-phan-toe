@@ -63,9 +63,7 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
     // Move was valid - commit it to our local history
     logger.info("Move finalized successfully");
 
-    const newMove = pendingMove
-      ? { x: pendingMove.x, y: pendingMove.y, round: currentRound }
-      : null;
+    const newMove = pendingMove ? { x: pendingMove.x, y: pendingMove.y, round: currentRound } : null;
 
     return {
       currentPhase: GamePhase.WaitingForOpponentMove,
@@ -83,4 +81,3 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
     };
   }
 }
-

@@ -1,10 +1,12 @@
 # SimPhanToe AI Agent
 
-An autonomous AI agent that plays SimPhanToe (Simultaneous Phantom Tic-Tac-Toe) on Sepolia testnet using LangGraph and OpenAI GPT-4.
+An autonomous AI agent that plays SimPhanToe (Simultaneous Phantom Tic-Tac-Toe) on Sepolia testnet using LangGraph and
+OpenAI GPT-4.
 
 ## Overview
 
 This agent uses:
+
 - **LangGraph** - State machine to model the game lifecycle
 - **OpenAI GPT-4** - Strategic move selection with game theory reasoning
 - **Zama FHE SDK** - Encryption/decryption for the phantom game mechanics
@@ -20,22 +22,26 @@ This agent uses:
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Copy `.env.example` to `.env` and fill in your values:
+
 ```bash
 cp .env.example .env
 ```
 
 Required environment variables:
+
 - `OPENAI_API_KEY` - Your OpenAI API key
 - `PRIVATE_KEY` - Agent wallet private key (with Sepolia ETH)
 - `SIMPHANTOE_ADDRESS` - Contract address (default: `0x52507f480444c844b1AB304f4Cbc5fED6077E8f0`)
 - `SEPOLIA_RPC_URL` - Sepolia RPC endpoint
 
 Optional:
+
 - `POLL_INTERVAL` - Polling interval in ms (default: 5000)
 - `LOG_LEVEL` - Log level: debug, info, warn, error (default: info)
 
@@ -123,6 +129,7 @@ src/
 ## Strategy
 
 The agent uses GPT-4 to make strategic decisions:
+
 - Tracks its own moves (opponent moves are hidden)
 - Considers center and corner positions
 - Avoids predictable patterns to reduce collisions
@@ -144,4 +151,3 @@ LOG_LEVEL=debug npx tsx src/index.ts play <gameId>
 ## License
 
 MIT
-

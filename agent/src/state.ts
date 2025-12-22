@@ -169,4 +169,3 @@ export function isGameFinished(winner: Winner): boolean {
 // Zero address constant
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 export const ZERO_BYTES32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
-

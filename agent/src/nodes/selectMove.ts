@@ -50,9 +50,7 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
     });
 
     // Build the prompt with game context
-    const moveHistory = myMoves
-      .map((m, i) => `Round ${m.round}: (${m.x}, ${m.y})`)
-      .join("\n");
+    const moveHistory = myMoves.map((m, i) => `Round ${m.round}: (${m.x}, ${m.y})`).join("\n");
 
     const occupiedCells = myMoves.map((m) => `(${m.x},${m.y})`).join(", ");
 
@@ -73,10 +71,7 @@ Choose your next move. Remember:
 
 Respond with JSON only: {"x": <0-3>, "y": <0-3>, "reasoning": "<brief>"}`;
 
-    const response = await model.invoke([
-      new SystemMessage(SYSTEM_PROMPT),
-      new HumanMessage(userPrompt),
-    ]);
+    const response = await model.invoke([new SystemMessage(SYSTEM_PROMPT), new HumanMessage(userPrompt)]);
 
     // Parse the response
     const content = response.content.toString();
@@ -180,4 +175,3 @@ function findAlternativeCell(myMoves: LocalMove[]): { x: number; y: number } | n
 
   return null;
 }
-

@@ -152,10 +152,7 @@ export function buildGraph() {
     .addConditionalEdges("waitForOpponent", routeAfterWait, ["checkGameState"])
     .addConditionalEdges("selectMove", routeAfterSelect, ["submitMove", "checkGameState"])
     .addConditionalEdges("submitMove", routeAfterSubmit, ["finalizeMove", "checkGameState"])
-    .addConditionalEdges("finalizeMove", routeAfterFinalizeMove, [
-      "selectMove",
-      "checkGameState",
-    ])
+    .addConditionalEdges("finalizeMove", routeAfterFinalizeMove, ["selectMove", "checkGameState"])
     .addConditionalEdges("finalizeGameState", routeAfterFinalizeGameState, [
       "revealBoard",
       "selectMove",
@@ -170,4 +167,3 @@ export function buildGraph() {
 
 // Export compiled graph type
 export type CompiledGraph = ReturnType<typeof buildGraph>;
-

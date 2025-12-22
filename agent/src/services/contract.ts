@@ -421,7 +421,7 @@ export class ContractService {
     gameId: bigint,
     encryptedX: `0x${string}` | Uint8Array,
     encryptedY: `0x${string}` | Uint8Array,
-    inputProof: `0x${string}` | Uint8Array
+    inputProof: `0x${string}` | Uint8Array,
   ): Promise<`0x${string}`> {
     logger.info("Submitting move", { gameId: gameId.toString() });
 
@@ -449,7 +449,7 @@ export class ContractService {
     gameId: bigint,
     player: `0x${string}`,
     isInvalid: boolean,
-    decryptionProof: `0x${string}`
+    decryptionProof: `0x${string}`,
   ): Promise<`0x${string}`> {
     logger.info("Finalizing move", { gameId: gameId.toString(), player, isInvalid });
 
@@ -472,7 +472,7 @@ export class ContractService {
     gameId: bigint,
     winner: number,
     collision: boolean,
-    decryptionProof: `0x${string}`
+    decryptionProof: `0x${string}`,
   ): Promise<`0x${string}`> {
     logger.info("Finalizing game state", { gameId: gameId.toString(), winner, collision });
 
@@ -491,11 +491,7 @@ export class ContractService {
     return txHash;
   }
 
-  async revealBoard(
-    gameId: bigint,
-    board: number[][],
-    decryptionProof: `0x${string}`
-  ): Promise<`0x${string}`> {
+  async revealBoard(gameId: bigint, board: number[][], decryptionProof: `0x${string}`): Promise<`0x${string}`> {
     logger.info("Revealing board", { gameId: gameId.toString() });
 
     const txHash = await this.walletClient.writeContract({
@@ -510,7 +506,7 @@ export class ContractService {
           [number, number, number, number],
           [number, number, number, number],
           [number, number, number, number],
-          [number, number, number, number]
+          [number, number, number, number],
         ],
         decryptionProof,
       ],
@@ -532,4 +528,3 @@ export function getContractService(): ContractService {
   }
   return contractService;
 }
-

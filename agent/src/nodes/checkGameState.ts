@@ -2,13 +2,7 @@
 
 import { createLogger } from "../utils/logger.js";
 import { getContractService } from "../services/contract.js";
-import {
-  type AgentState,
-  GamePhase,
-  Winner,
-  ZERO_ADDRESS,
-  ZERO_BYTES32,
-} from "../state.js";
+import { type AgentState, GamePhase, Winner, ZERO_ADDRESS, ZERO_BYTES32 } from "../state.js";
 
 const logger = createLogger("CheckGameState");
 
@@ -160,4 +154,3 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
     };
   }
 }
-
