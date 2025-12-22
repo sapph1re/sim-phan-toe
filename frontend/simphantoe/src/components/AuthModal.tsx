@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { usePrivy, useConnectWallet } from "@privy-io/react-auth";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { isPrivyConfigured } from "../lib/privy";
@@ -9,10 +9,6 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
-  const [email, setEmail] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   // Privy hooks - only available when Privy is configured
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const privyHooks = isPrivyConfigured ? usePrivy() : null;
@@ -20,46 +16,45 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const privyConnectWallet = isPrivyConfigured ? useConnectWallet() : null;
   const { openConnectModal } = useConnectModal();
 
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setEmail("");
-      setError(null);
-      setIsSubmitting(false);
-    }
-  }, [isOpen]);
-
   // Handle email sign-in with Privy
-  const handleEmailSignIn = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  // Note: Privy's login() always shows their own modal for security reasons
+  // We close our modal and let Privy handle the email entry
+  const handleEmailSignIn = useCallback(() => {
     if (!privyHooks) {
-      setError("Privy is not configured");
+      console.error("Privy is not configured");
       return;
     }
 
-    if (!email || !email.includes("@")) {
-      setError("Please enter a valid email address");
+    // Check if Privy is ready before attempting login
+    if (!privyHooks.ready) {
+      console.warn("Privy is not ready yet, waiting...");
+      // Wait a bit and try again
+      setTimeout(() => {
+        if (privyHooks.ready) {
+          onClose();
+          setTimeout(() => {
+            privyHooks.login({ loginMethods: ["email"] });
+          }, 100);
+        } else {
+          console.error("Privy failed to initialize. Check browser console for iframe errors.");
+        }
+      }, 500);
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      // Privy's login will send a magic link to the email
-      await privyHooks.login({ 
-        loginMethods: ["email"],
-        prefill: { type: "email", value: email }
-      });
-      onClose();
-    } catch (err) {
-      console.error("Email sign-in error:", err);
-      setError(err instanceof Error ? err.message : "Failed to sign in");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [email, privyHooks, onClose]);
+    // Close our modal first
+    onClose();
+    
+    // Small delay to ensure our modal closes before Privy's opens
+    setTimeout(() => {
+      try {
+        // Privy's login() will show their own modal for email entry
+        privyHooks.login({ loginMethods: ["email"] });
+      } catch (error) {
+        console.error("Failed to open Privy login modal:", error);
+      }
+    }, 100);
+  }, [privyHooks, onClose]);
 
   // Handle external wallet connection
   // Uses Privy's wallet connection when configured, otherwise RainbowKit
@@ -132,46 +127,24 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </p>
         </div>
 
-        {/* Email sign-in form (Primary option) */}
+        {/* Email sign-in button (Primary option) */}
         {isPrivyConfigured && (
-          <form onSubmit={handleEmailSignIn} className="mb-6">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-              Email Address
-            </label>
-            <div className="relative">
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-4 py-3 bg-cyber-darker border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyber-purple focus:ring-1 focus:ring-cyber-purple transition-colors"
-                disabled={isSubmitting}
-                autoFocus
-              />
-              {isSubmitting && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="w-5 h-5 border-2 border-cyber-purple border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
-            
-            {error && (
-              <p className="mt-2 text-sm text-red-400">{error}</p>
-            )}
-
+          <div className="mb-6">
             <button
-              type="submit"
-              disabled={isSubmitting || !email}
-              className="w-full mt-4 px-6 py-3 bg-gradient-to-r from-cyber-purple to-cyber-pink text-white font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              onClick={handleEmailSignIn}
+              className="w-full px-6 py-3 bg-gradient-to-r from-cyber-purple to-cyber-pink text-white font-semibold rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
             >
-              {isSubmitting ? "Signing in..." : "Continue with Email"}
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+              Continue with Email
             </button>
             
             <p className="text-xs text-gray-500 mt-3 text-center">
               We'll send you a magic link to sign in instantly
             </p>
-          </form>
+          </div>
         )}
 
         {/* Divider */}
