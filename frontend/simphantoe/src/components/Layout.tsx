@@ -1,10 +1,10 @@
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useChainId } from "wagmi";
 import { useState } from "react";
 import { GameLobby } from "./GameLobby";
 import { GameView } from "./GameView";
 import { useContractAddress } from "../hooks/useSimPhanToe";
 import { useFHE } from "../lib/fhe";
+import { AuthButton } from "./AuthButton";
 
 // Network names for display
 const NETWORK_NAMES: Record<number, string> = {
@@ -81,7 +81,7 @@ export function Layout() {
                       : "FHE Ready"}
               </div>
             )}
-            <ConnectButton />
+            <AuthButton />
           </div>
         </div>
       </header>
@@ -214,7 +214,7 @@ function WelcomeScreen() {
         </div>
 
         <div className="flex justify-center">
-          <ConnectButton />
+          <AuthButton />
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useAccount, useChainId } from "wagmi";
 // Import from bundle - uses window.relayerSDK set up by UMD script in index.html
 // See: https://docs.zama.org/protocol/relayer-sdk-guides/development-guide/web-applications
 import { initSDK, createInstance, SepoliaConfig } from "@zama-fhe/relayer-sdk/bundle";
+import { isPrivyConfigured } from "./privy";
 
 // Sepolia chain ID
 const SEPOLIA_CHAIN_ID = 11155111;
@@ -189,10 +190,73 @@ interface FHEContextType {
 
 const FHEContext = createContext<FHEContextType | null>(null);
 
-// FHE Provider Component
-export function FHEProvider({ children }: { children: ReactNode }) {
+// Context for passing Privy wallets to FHE provider
+interface PrivyWallet {
+  walletClientType: string;
+  getEthereumProvider: () => Promise<unknown>;
+}
+
+// EIP-1193 Provider type for FHE SDK
+interface Eip1193Provider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+}
+
+// Hook to get the active EIP-1193 provider
+// Supports both Privy embedded wallets and external browser wallets
+// privyWallets is passed in from parent component that can use Privy hooks
+function useEthereumProvider(privyWallets: PrivyWallet[] = []) {
+  const [provider, setProvider] = useState<Eip1193Provider | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    async function getProvider() {
+      // First, try to get provider from Privy embedded wallet
+      if (isPrivyConfigured && privyWallets.length > 0) {
+        // Find the embedded wallet (Privy wallet) or use the first available
+        const embeddedWallet = privyWallets.find(
+          (w) => w.walletClientType === "privy"
+        );
+        const activeWallet = embeddedWallet || privyWallets[0];
+
+        if (activeWallet) {
+          try {
+            // Get EIP-1193 provider from Privy wallet
+            const walletProvider = await activeWallet.getEthereumProvider();
+            if (walletProvider) {
+              setProvider(walletProvider as Eip1193Provider);
+              setIsReady(true);
+              console.log("Using Privy wallet provider:", activeWallet.walletClientType);
+              return;
+            }
+          } catch (err) {
+            console.warn("Failed to get Privy wallet provider:", err);
+          }
+        }
+      }
+
+      // Fallback to window.ethereum for external wallets
+      if (typeof window !== "undefined" && window.ethereum) {
+        setProvider(window.ethereum as Eip1193Provider);
+        setIsReady(true);
+        console.log("Using window.ethereum provider");
+        return;
+      }
+
+      setProvider(null);
+      setIsReady(false);
+    }
+
+    getProvider();
+  }, [privyWallets]);
+
+  return { provider, isReady };
+}
+
+// Inner FHE Provider that receives Privy wallets as props
+function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode; privyWallets?: PrivyWallet[] }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const { provider: ethereumProvider, isReady: providerReady } = useEthereumProvider(privyWallets);
 
   const [instance, setInstance] = useState<FHEInstanceType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -242,7 +306,7 @@ export function FHEProvider({ children }: { children: ReactNode }) {
 
   // Step 2: Create instance when wallet is connected, SDK is loaded, and on Sepolia
   useEffect(() => {
-    if (!isSupported || !sdkLoaded || !isConnected || !address) {
+    if (!isSupported || !sdkLoaded || !isConnected || !address || !providerReady || !ethereumProvider) {
       // Reset state when disconnected or on wrong network
       if ((!isConnected || !isSupported) && isInitialized) {
         setInstance(null);
@@ -258,14 +322,15 @@ export function FHEProvider({ children }: { children: ReactNode }) {
       setError(null);
 
       try {
-        if (typeof window === "undefined" || !window.ethereum) {
+        if (!ethereumProvider) {
           throw new Error("No ethereum provider found");
         }
 
-        // Create instance with Sepolia config
+        // Create instance with Sepolia config using the active provider
+        // (could be Privy embedded wallet or external browser wallet)
         const config = {
           ...SepoliaConfig,
-          network: window.ethereum,
+          network: ethereumProvider,
         };
 
         const fheInstance = await createInstance(config);
@@ -292,7 +357,7 @@ export function FHEProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [isSupported, sdkLoaded, isConnected, address, chainId, isInitialized]);
+  }, [isSupported, sdkLoaded, isConnected, address, chainId, isInitialized, providerReady, ethereumProvider]);
 
   // Encrypt a move (x, y coordinates)
   // See: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer/input
@@ -372,6 +437,32 @@ export function FHEProvider({ children }: { children: ReactNode }) {
   };
 
   return <FHEContext.Provider value={value}>{children}</FHEContext.Provider>;
+}
+
+// Wrapper component that gets Privy wallets when Privy is configured
+function PrivyWalletsWrapper({ children }: { children: ReactNode }) {
+  // Conditionally import and use Privy hooks only when configured
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let wallets: any[] = [];
+  
+  if (isPrivyConfigured) {
+    try {
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      const { useWallets } = require("@privy-io/react-auth");
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      const walletsResult = useWallets();
+      wallets = walletsResult.wallets || [];
+    } catch {
+      // Privy not available, use empty wallets
+    }
+  }
+
+  return <FHEProviderInner privyWallets={wallets}>{children}</FHEProviderInner>;
+}
+
+// FHE Provider Component - exported wrapper
+export function FHEProvider({ children }: { children: ReactNode }) {
+  return <PrivyWalletsWrapper>{children}</PrivyWalletsWrapper>;
 }
 
 // Hook to use FHE functionality
