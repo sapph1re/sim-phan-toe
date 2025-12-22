@@ -8,19 +8,7 @@ export default defineConfig({
     // Required for @zama-fhe/relayer-sdk
     global: "globalThis",
   },
-  server: {
-    // Required headers for FHE SDK (SharedArrayBuffer/threads support)
-    // See: https://docs.zama.org/protocol/relayer-sdk-guides/development-guide
-    headers: {
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-    },
-  },
-  preview: {
-    // Same headers for preview server
-    headers: {
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-    },
-  },
+  // Note: COOP/COEP headers are NOT set because:
+  // 1. FHE SDK uses thread: 0 (single-threaded mode, no SharedArrayBuffer needed)
+  // 2. Privy embedded wallets require iframes that break with strict COOP/COEP
 });

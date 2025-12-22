@@ -16,21 +16,17 @@
   environment = { NODE_VERSION = "22" }
 
 # Headers configuration
-# CRITICAL: These headers are required for SharedArrayBuffer support
-# which is needed by the Zama FHE SDK WASM modules
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Cross-Origin-Opener-Policy = "same-origin"
-    Cross-Origin-Embedder-Policy = "require-corp"
+# Note: COOP/COEP headers for SharedArrayBuffer are NOT set here because:
+# 1. FHE SDK uses thread: 0 (single-threaded mode, no SharedArrayBuffer needed)
+# 2. Privy embedded wallets require iframes that break with strict COOP/COEP
+# If you need multi-threaded FHE in the future, you'll need to choose between
+# Privy embedded wallets and FHE threading.
 
 # WASM files need correct MIME type
 [[headers]]
   for = "/*.wasm"
   [headers.values]
     Content-Type = "application/wasm"
-    Cross-Origin-Opener-Policy = "same-origin"
-    Cross-Origin-Embedder-Policy = "require-corp"
 
 # SPA fallback - redirect all routes to index.html
 [[redirects]]
