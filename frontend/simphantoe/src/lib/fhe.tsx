@@ -193,6 +193,7 @@ const FHEContext = createContext<FHEContextType | null>(null);
 // Context for passing Privy wallets to FHE provider
 interface PrivyWallet {
   walletClientType: string;
+  address?: string;
   getEthereumProvider: () => Promise<unknown>;
 }
 
@@ -257,6 +258,10 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { provider: ethereumProvider, isReady: providerReady } = useEthereumProvider(privyWallets);
+  
+  // Check if user has a wallet connection (either wagmi or Privy)
+  const hasWalletConnection = isConnected || privyWallets.length > 0;
+  const activeAddress = address || (privyWallets.length > 0 ? privyWallets[0]?.address : undefined);
 
   const [instance, setInstance] = useState<FHEInstanceType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -306,9 +311,9 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
 
   // Step 2: Create instance when wallet is connected, SDK is loaded, and on Sepolia
   useEffect(() => {
-    if (!isSupported || !sdkLoaded || !isConnected || !address || !providerReady || !ethereumProvider) {
+    if (!isSupported || !sdkLoaded || !hasWalletConnection || !activeAddress || !providerReady || !ethereumProvider) {
       // Reset state when disconnected or on wrong network
-      if ((!isConnected || !isSupported) && isInitialized) {
+      if ((!hasWalletConnection || !isSupported) && isInitialized) {
         setInstance(null);
         setIsInitialized(false);
       }
@@ -338,7 +343,7 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
         if (mounted) {
           setInstance(fheInstance);
           setIsInitialized(true);
-          console.log("FHE instance created successfully for address:", address);
+          console.log("FHE instance created successfully for address:", activeAddress);
         }
       } catch (err) {
         console.error("FHE initialization error:", err);
@@ -357,7 +362,7 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
     return () => {
       mounted = false;
     };
-  }, [isSupported, sdkLoaded, isConnected, address, chainId, isInitialized, providerReady, ethereumProvider]);
+  }, [isSupported, sdkLoaded, hasWalletConnection, activeAddress, chainId, isInitialized, providerReady, ethereumProvider]);
 
   // Encrypt a move (x, y coordinates)
   // See: https://docs.zama.org/protocol/relayer-sdk-guides/fhevm-relayer/input
@@ -369,12 +374,12 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
       if (!instance) {
         throw new Error("FHE SDK not initialized");
       }
-      if (!address) {
+      if (!activeAddress) {
         throw new Error("Wallet not connected");
       }
 
       // Create encrypted input for the contract
-      const input = instance.createEncryptedInput(contractAddress, address);
+      const input = instance.createEncryptedInput(contractAddress, activeAddress);
 
       // Add the x and y coordinates as uint8 values
       input.add8(x);
@@ -388,7 +393,7 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
         inputProof: encrypted.inputProof as `0x${string}`,
       };
     },
-    [instance, address, isSupported],
+    [instance, activeAddress, isSupported],
   );
 
   // Public decryption

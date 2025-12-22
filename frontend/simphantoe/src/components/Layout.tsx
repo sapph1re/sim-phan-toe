@@ -1,10 +1,12 @@
 import { useAccount, useChainId } from "wagmi";
 import { useState } from "react";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { GameLobby } from "./GameLobby";
 import { GameView } from "./GameView";
 import { useContractAddress } from "../hooks/useSimPhanToe";
 import { useFHE } from "../lib/fhe";
 import { AuthButton } from "./AuthButton";
+import { isPrivyConfigured } from "../lib/privy";
 
 // Network names for display
 const NETWORK_NAMES: Record<number, string> = {
@@ -15,6 +17,21 @@ const NETWORK_NAMES: Record<number, string> = {
 export function Layout() {
   const { isConnected } = useAccount();
   const chainId = useChainId();
+  
+  // Privy hooks - check if user is authenticated via Privy
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const privyState = isPrivyConfigured ? usePrivy() : null;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const walletsState = isPrivyConfigured ? useWallets() : null;
+  
+  const isPrivyAuthenticated = privyState?.authenticated ?? false;
+  const privyWallets = walletsState?.wallets ?? [];
+  
+  // User is "connected" if:
+  // 1. Wagmi reports connected (external wallet), OR
+  // 2. Privy is authenticated AND has at least one wallet ready
+  const hasPrivyWallet = privyWallets.length > 0;
+  const isUserConnected = isConnected || (isPrivyAuthenticated && hasPrivyWallet);
   const { isConfigured } = useContractAddress();
   const { isLoading: fheLoading, error: fheError, isSupported: fheSupported } = useFHE();
   const [activeGameId, setActiveGameId] = useState<bigint | null>(null);
@@ -66,7 +83,7 @@ export function Layout() {
           </div>
           <div className="flex items-center gap-4">
             {/* FHE Status Badge */}
-            {isConnected && (
+            {isUserConnected && (
               <div className={`fhe-indicator ${!fheSupported ? "opacity-50" : ""}`}>
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -87,7 +104,7 @@ export function Layout() {
       </header>
 
       {/* Network Warning Banner */}
-      {isConnected && !isOnSepolia && (
+      {isUserConnected && !isOnSepolia && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3">
           <div className="max-w-6xl mx-auto flex items-center gap-3 text-amber-400 text-sm">
             <svg
@@ -111,7 +128,10 @@ export function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-6xl mx-auto px-6 py-8 w-full">
-        {!isConnected ? (
+        {/* Show loading when Privy is authenticated but wallet isn't ready yet */}
+        {isPrivyAuthenticated && !hasPrivyWallet && !isConnected ? (
+          <WalletInitializing />
+        ) : !isUserConnected ? (
           <WelcomeScreen />
         ) : !isConfigured ? (
           <ContractNotConfigured />
@@ -248,6 +268,28 @@ function ContractNotConfigured() {
           <p className="text-gray-500 mt-4 mb-2"># Then set in .env file:</p>
           <p className="text-cyber-cyan">VITE_SIMPHANTOE_ADDRESS=0x...</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WalletInitializing() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div className="glass p-12 max-w-xl animate-fade-in">
+        <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-cyber-purple/20 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-cyber-purple border-t-transparent rounded-full animate-spin" />
+        </div>
+
+        <h2 className="font-display text-2xl font-bold mb-4 text-white">Setting Up Your Wallet</h2>
+
+        <p className="text-gray-400 mb-6">
+          Creating your embedded wallet. This only takes a moment...
+        </p>
+        
+        <p className="text-xs text-gray-500">
+          Your wallet is being securely generated in the browser.
+        </p>
       </div>
     </div>
   );
