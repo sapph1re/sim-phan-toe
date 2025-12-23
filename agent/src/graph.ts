@@ -63,9 +63,14 @@ function routeFromCheckState(state: AgentState): string {
   }
 }
 
-// Router after waiting
+// Router after waiting - END the graph so orchestrator regains control
+// The orchestrator will re-invoke the graph when it's time to check again
 function routeAfterWait(_state: AgentState): string {
-  return "checkGameState";
+  // In orchestrator mode, we want to END here so the orchestrator can:
+  // 1. Save state to DB
+  // 2. Move to the next game in round-robin
+  // 3. Re-invoke this game later based on next_check_at scheduling
+  return END;
 }
 
 // Router after select move
@@ -90,6 +95,9 @@ function routeAfterFinalizeMove(state: AgentState): string {
     case GamePhase.SelectingMove:
       // Move was invalid, need to pick again
       return "selectMove";
+    case GamePhase.WaitingForOpponentMove:
+      // Move finalized, now waiting - END to return control to orchestrator
+      return "waitForOpponent";
     case GamePhase.Error:
       return "checkGameState";
     default:
@@ -149,10 +157,11 @@ export function buildGraph() {
     ])
 
     // Add edges from other nodes
-    .addConditionalEdges("waitForOpponent", routeAfterWait, ["checkGameState"])
+    // waitForOpponent now goes to END to return control to orchestrator
+    .addConditionalEdges("waitForOpponent", routeAfterWait, [END])
     .addConditionalEdges("selectMove", routeAfterSelect, ["submitMove", "checkGameState"])
     .addConditionalEdges("submitMove", routeAfterSubmit, ["finalizeMove", "checkGameState"])
-    .addConditionalEdges("finalizeMove", routeAfterFinalizeMove, ["selectMove", "checkGameState"])
+    .addConditionalEdges("finalizeMove", routeAfterFinalizeMove, ["selectMove", "waitForOpponent", "checkGameState"])
     .addConditionalEdges("finalizeGameState", routeAfterFinalizeGameState, [
       "revealBoard",
       "selectMove",

@@ -110,7 +110,7 @@ export class GameOrchestrator {
         logger.error("Error processing game", error, {
           gameId: game.game_id.toString(),
         });
-        
+
         // Mark game with error but don't stop
         const gameKey = createGameKey(CHAIN_ID, this.contractAddress, game.game_id);
         await gameStore.updateGame(gameKey, {
@@ -168,8 +168,7 @@ export class GameOrchestrator {
 
     // Check for 3-day abandonment (only for games with an opponent who stopped playing)
     if (game.current_phase === GamePhase.WaitingForOpponentMove && game.last_opponent_activity) {
-      const daysSinceActivity =
-        (Date.now() - game.last_opponent_activity.getTime()) / (24 * 60 * 60 * 1000);
+      const daysSinceActivity = (Date.now() - game.last_opponent_activity.getTime()) / (24 * 60 * 60 * 1000);
 
       if (daysSinceActivity >= 3) {
         logger.info("Abandoning game - opponent inactive for 3+ days", {
@@ -193,9 +192,11 @@ export class GameOrchestrator {
     } as AgentState;
 
     // Run one step of the graph
+    // Higher limit to allow completing one logical action cycle
+    // (e.g., checkGameState → selectMove → submitMove → finalizeMove → waitForOpponent → END)
     try {
       const newState = await this.graph.invoke(state, {
-        recursionLimit: 1,
+        recursionLimit: 25,
       });
 
       // Calculate next check time based on phase
@@ -368,4 +369,3 @@ export class GameOrchestrator {
 export function createOrchestrator(): GameOrchestrator {
   return new GameOrchestrator();
 }
-
