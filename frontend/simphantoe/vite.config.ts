@@ -8,6 +8,16 @@ export default defineConfig({
     // Required for @zama-fhe/relayer-sdk
     global: "globalThis",
   },
+  resolve: {
+    alias: {
+      // Polyfill buffer for browser compatibility (needed by Privy gas sponsorship)
+      buffer: "buffer",
+    },
+  },
+  optimizeDeps: {
+    // Include buffer in pre-bundling for browser compatibility
+    include: ["buffer"],
+  },
   // Note: COOP/COEP headers are NOT set because:
   // 1. FHE SDK uses thread: 0 (single-threaded mode, no SharedArrayBuffer needed)
   // 2. Privy embedded wallets require iframes that break with strict COOP/COEP
