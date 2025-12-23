@@ -1,4 +1,4 @@
-import { useReadContract, useWriteContract, useWatchContractEvent, useAccount, usePublicClient } from "wagmi";
+import { useReadContract, useWatchContractEvent, useAccount, usePublicClient } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { toHex } from "viem";
@@ -14,6 +14,7 @@ import {
   isBoardRevealed,
 } from "../lib/contracts";
 import { useFHE, useEncryptMove, usePublicDecrypt, RelayerError } from "../lib/fhe";
+import { useSponsoredWriteContract } from "./useSponsoredTransaction";
 
 // Helper hook for localStorage-backed moves (persists across page refreshes)
 function usePersistedMoves(gameId: bigint | undefined, playerAddress: string | undefined) {
@@ -164,7 +165,7 @@ export function useCanSubmitMove(gameId: bigint | undefined, playerAddress: `0x$
 // Hook to start a new game
 export function useStartGame() {
   const { address } = useContractAddress();
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
+  const { writeContractAsync, isPending, isSuccess, error } = useSponsoredWriteContract();
   const queryClient = useQueryClient();
 
   const startGame = useCallback(async () => {
@@ -184,7 +185,7 @@ export function useStartGame() {
 // Hook to join a game
 export function useJoinGame() {
   const { address } = useContractAddress();
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
+  const { writeContractAsync, isPending, isSuccess, error } = useSponsoredWriteContract();
   const queryClient = useQueryClient();
 
   const joinGame = useCallback(
@@ -208,7 +209,7 @@ export function useJoinGame() {
 // Hook to submit an encrypted move (FHE)
 export function useSubmitMove() {
   const { address: contractAddress } = useContractAddress();
-  const { writeContractAsync, isPending: isSubmitting, error: submitError } = useWriteContract();
+  const { writeContractAsync, isPending: isSubmitting, error: submitError } = useSponsoredWriteContract();
   const { encrypt, isEncrypting, error: encryptError } = useEncryptMove();
   const queryClient = useQueryClient();
 
@@ -253,7 +254,7 @@ export function useSubmitMove() {
 // Hook to finalize a move after decryption
 export function useFinalizeMove() {
   const { address: contractAddress } = useContractAddress();
-  const { writeContractAsync, isPending, error } = useWriteContract();
+  const { writeContractAsync, isPending, error } = useSponsoredWriteContract();
   const { decrypt, isDecrypting, error: decryptError } = usePublicDecrypt();
   const publicClient = usePublicClient();
   const queryClient = useQueryClient();
@@ -296,7 +297,7 @@ export function useFinalizeMove() {
 // Hook to finalize game state after decryption
 export function useFinalizeGameState() {
   const { address: contractAddress } = useContractAddress();
-  const { writeContractAsync, isPending, error } = useWriteContract();
+  const { writeContractAsync, isPending, error } = useSponsoredWriteContract();
   const { decrypt, isDecrypting, error: decryptError } = usePublicDecrypt();
   const publicClient = usePublicClient();
   const queryClient = useQueryClient();
@@ -340,7 +341,7 @@ export function useFinalizeGameState() {
 // Hook to reveal the board after game ends
 export function useRevealBoard() {
   const { address: contractAddress } = useContractAddress();
-  const { writeContractAsync, isPending, error } = useWriteContract();
+  const { writeContractAsync, isPending, error } = useSponsoredWriteContract();
   const { decrypt, isDecrypting, error: decryptError } = usePublicDecrypt();
   const publicClient = usePublicClient();
   const queryClient = useQueryClient();
