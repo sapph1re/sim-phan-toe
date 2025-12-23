@@ -29,29 +29,29 @@ export class EventService {
   private chainId: number;
   private rpcUrl: string;
   private wsUrl: string | null;
-  
+
   private publicClient: PublicClient | null = null;
   private wsClient: PublicClient | null = null;
   private unwatchFns: WatchContractEventReturnType[] = [];
   private pollInterval: NodeJS.Timeout | null = null;
   private isWsConnected = false;
   private lastPolledBlock: bigint = 0n;
-  
+
   private callback: EventCallback | null = null;
 
   constructor(contractAddress: `0x${string}`, chainId: number = 11155111) {
     this.contractAddress = contractAddress;
     this.chainId = chainId;
-    
+
     const rpcUrl = process.env.SEPOLIA_RPC_URL;
     if (!rpcUrl) {
       throw new Error("SEPOLIA_RPC_URL environment variable is required");
     }
     this.rpcUrl = rpcUrl;
-    
+
     // Try to derive WebSocket URL from RPC URL
     this.wsUrl = process.env.SEPOLIA_WS_URL || this.deriveWsUrl(rpcUrl);
-    
+
     // Create HTTP client for polling fallback
     this.publicClient = createPublicClient({
       chain: sepolia,
@@ -75,9 +75,9 @@ export class EventService {
    */
   async startWatching(callback: EventCallback): Promise<void> {
     this.callback = callback;
-    
+
     logger.info("Starting event watching...");
-    
+
     // Initialize last polled block
     if (this.publicClient) {
       this.lastPolledBlock = await this.publicClient.getBlockNumber();
@@ -104,19 +104,19 @@ export class EventService {
    */
   async stopWatching(): Promise<void> {
     logger.info("Stopping event watching...");
-    
+
     // Stop WebSocket watchers
     for (const unwatch of this.unwatchFns) {
       unwatch();
     }
     this.unwatchFns = [];
-    
+
     // Stop polling
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
     }
-    
+
     this.isWsConnected = false;
     this.callback = null;
   }
@@ -178,10 +178,10 @@ export class EventService {
    */
   private handleWsDisconnect(): void {
     if (!this.isWsConnected) return;
-    
+
     logger.warn("WebSocket disconnected, falling back to polling");
     this.isWsConnected = false;
-    
+
     // Clean up WebSocket watchers
     for (const unwatch of this.unwatchFns) {
       try {
@@ -191,7 +191,7 @@ export class EventService {
       }
     }
     this.unwatchFns = [];
-    
+
     // Start polling
     this.startPolling();
   }
@@ -205,14 +205,14 @@ export class EventService {
     }
 
     logger.info("Starting event polling fallback");
-    
+
     // Poll every 10 seconds
     const POLL_INTERVAL_MS = 10000;
-    
+
     this.pollInterval = setInterval(async () => {
       await this.pollForEvents();
     }, POLL_INTERVAL_MS);
-    
+
     // Do an immediate poll
     this.pollForEvents();
   }
@@ -225,7 +225,7 @@ export class EventService {
 
     try {
       const currentBlock = await this.publicClient.getBlockNumber();
-      
+
       if (currentBlock <= this.lastPolledBlock) {
         return; // No new blocks
       }
@@ -239,12 +239,21 @@ export class EventService {
       const eventConfigs = [
         { name: "GameStarted" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
         { name: "PlayerJoined" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        { name: "MoveSubmitted" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
+        {
+          name: "MoveSubmitted" as const,
+          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
+        },
         { name: "MoveMade" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        { name: "MovesProcessed" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
+        {
+          name: "MovesProcessed" as const,
+          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
+        },
         { name: "Collision" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
         { name: "GameUpdated" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        { name: "BoardRevealed" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
+        {
+          name: "BoardRevealed" as const,
+          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
+        },
       ];
 
       for (const config of eventConfigs) {
@@ -326,4 +335,3 @@ export class EventService {
 export function createEventService(contractAddress: `0x${string}`, chainId?: number): EventService {
   return new EventService(contractAddress, chainId);
 }
-

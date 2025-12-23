@@ -391,7 +391,7 @@ export class ContractService {
     if (logs.length === 0) {
       // Fallback: if event parsing fails, try to re-query logs
       logger.warn("GameStarted event not found in receipt, attempting fallback query...");
-      
+
       const blockLogs = await this.publicClient.getLogs({
         address: this.contractAddress,
         event: {
@@ -406,9 +406,7 @@ export class ContractService {
         toBlock: receipt.blockNumber,
       });
 
-      const ourLog = blockLogs.find(
-        (log) => log.transactionHash === txHash
-      );
+      const ourLog = blockLogs.find((log) => log.transactionHash === txHash);
 
       if (!ourLog || !ourLog.args.gameId) {
         throw new Error("GameStarted event not found in transaction receipt or block logs");
@@ -590,7 +588,7 @@ export class ContractService {
     gameId: bigint,
     encryptedX: `0x${string}`,
     encryptedY: `0x${string}`,
-    inputProof: `0x${string}`
+    inputProof: `0x${string}`,
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await this.publicClient.simulateContract({
@@ -616,7 +614,7 @@ export class ContractService {
     gameId: bigint,
     player: `0x${string}`,
     isInvalid: boolean,
-    decryptionProof: `0x${string}`
+    decryptionProof: `0x${string}`,
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await this.publicClient.simulateContract({
@@ -642,7 +640,7 @@ export class ContractService {
     gameId: bigint,
     winner: number,
     collision: boolean,
-    decryptionProof: `0x${string}`
+    decryptionProof: `0x${string}`,
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await this.publicClient.simulateContract({
@@ -667,7 +665,7 @@ export class ContractService {
   async simulateRevealBoard(
     gameId: bigint,
     board: number[][],
-    decryptionProof: `0x${string}`
+    decryptionProof: `0x${string}`,
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await this.publicClient.simulateContract({

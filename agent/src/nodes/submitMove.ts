@@ -103,12 +103,7 @@ export async function submitMove(state: AgentState): Promise<Partial<AgentState>
     logger.debug("Move encrypted successfully");
 
     logger.debug("Submitting encrypted move to contract...");
-    const txHash = await contract.submitMove(
-      gameId,
-      encrypted.handles[0],
-      encrypted.handles[1],
-      encrypted.inputProof
-    );
+    const txHash = await contract.submitMove(gameId, encrypted.handles[0], encrypted.handles[1], encrypted.inputProof);
 
     // =========================================================================
     // 5. Store tx marker and update attempted move

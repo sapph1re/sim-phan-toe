@@ -81,15 +81,15 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
     // 1. Get attempted moves from persistence (critical for phantom game!)
     // =========================================================================
     const attemptedMoves = await gameStore.getAttemptedMoves(gameKey);
-    
+
     // Build forbidden cells set - cells we've already tried
     const forbiddenCells = new Set<string>();
-    
+
     // Add all attempted moves (from DB) to forbidden set
     for (const move of attemptedMoves) {
       forbiddenCells.add(coordToKey(move.x, move.y));
     }
-    
+
     // Also add myMoves from state (in case DB isn't synced yet)
     for (const move of myMoves) {
       forbiddenCells.add(coordToKey(move.x, move.y));
@@ -128,15 +128,15 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
           currentRound,
           collisionOccurred,
           availableCells,
-          attempt > 0 // isRetry
+          attempt > 0, // isRetry
         );
 
         // Validate move is not forbidden
         if (forbiddenCells.has(coordToKey(llmMove.x, llmMove.y))) {
-          logger.warn("LLM chose a forbidden cell", { 
-            x: llmMove.x, 
-            y: llmMove.y, 
-            attempt: attempt + 1 
+          logger.warn("LLM chose a forbidden cell", {
+            x: llmMove.x,
+            y: llmMove.y,
+            attempt: attempt + 1,
           });
           lastError = "LLM chose forbidden cell";
           continue;
@@ -156,7 +156,7 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
     if (!selectedMove) {
       logger.warn("LLM failed after retries, using fallback selection");
       selectedMove = selectFallbackMove(availableCells);
-      
+
       if (!selectedMove) {
         return {
           currentPhase: GamePhase.Error,
@@ -179,7 +179,7 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
     const allCoords = getAllCoords();
     const forbiddenCells = new Set(myMoves.map((m) => coordToKey(m.x, m.y)));
     const availableCells = allCoords.filter((c) => !forbiddenCells.has(coordToKey(c.x, c.y)));
-    
+
     const fallback = selectFallbackMove(availableCells);
     if (fallback) {
       logger.info("Using fallback move selection", fallback);
@@ -206,7 +206,7 @@ async function getLLMMove(
   currentRound: number,
   collisionOccurred: boolean,
   availableCells: { x: number; y: number }[],
-  isRetry: boolean
+  isRetry: boolean,
 ): Promise<{ x: number; y: number }> {
   // Create model with JSON mode
   const model = new ChatOpenAI({
@@ -218,9 +218,7 @@ async function getLLMMove(
 
   // Build move history from confirmed moves
   const confirmedMoves = attemptedMoves.filter((m) => m.status === "confirmed");
-  const moveHistory = confirmedMoves
-    .map((m) => `Round ${m.round}: (${m.x}, ${m.y})`)
-    .join("\n");
+  const moveHistory = confirmedMoves.map((m) => `Round ${m.round}: (${m.x}, ${m.y})`).join("\n");
 
   const occupiedCells = confirmedMoves.map((m) => `(${m.x},${m.y})`).join(", ");
   const availableCellsList = availableCells.map((c) => `(${c.x},${c.y})`).join(", ");
@@ -246,10 +244,7 @@ Choose your next move. Remember:
 
 Respond with JSON only: {"x": <0-3>, "y": <0-3>, "reasoning": "<brief>"}`;
 
-  const response = await model.invoke([
-    new SystemMessage(SYSTEM_PROMPT),
-    new HumanMessage(userPrompt),
-  ]);
+  const response = await model.invoke([new SystemMessage(SYSTEM_PROMPT), new HumanMessage(userPrompt)]);
 
   // Parse and validate response
   const content = response.content.toString();
@@ -300,9 +295,7 @@ function isValidCoordinate(coord: number): boolean {
  * Fallback move selection when LLM fails
  * Uses strategic positioning: center > corners > edges
  */
-function selectFallbackMove(
-  availableCells: { x: number; y: number }[]
-): { x: number; y: number } | null {
+function selectFallbackMove(availableCells: { x: number; y: number }[]): { x: number; y: number } | null {
   if (availableCells.length === 0) {
     return null;
   }

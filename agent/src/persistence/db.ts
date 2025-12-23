@@ -72,7 +72,7 @@ export function getPool(): pg.Pool {
 // Execute a query with automatic connection handling
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
-  params?: unknown[]
+  params?: unknown[],
 ): Promise<pg.QueryResult<T>> {
   const pool = getPool();
   const start = Date.now();
@@ -124,9 +124,7 @@ export async function closePool(): Promise<void> {
 }
 
 // Transaction helper
-export async function withTransaction<T>(
-  callback: (client: pg.PoolClient) => Promise<T>
-): Promise<T> {
+export async function withTransaction<T>(callback: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const pool = getPool();
   const client = await pool.connect();
 
@@ -142,4 +140,3 @@ export async function withTransaction<T>(
     client.release();
   }
 }
-

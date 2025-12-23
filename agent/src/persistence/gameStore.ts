@@ -65,11 +65,7 @@ export interface GameKey {
 }
 
 // Helper to create game key
-export function createGameKey(
-  chainId: number,
-  contractAddress: string,
-  gameId: bigint
-): GameKey {
+export function createGameKey(chainId: number, contractAddress: string, gameId: bigint): GameKey {
   return { chainId, contractAddress, gameId };
 }
 
@@ -85,7 +81,7 @@ export async function createGame(
     currentPhase?: string;
     status?: "active" | "completed" | "abandoned";
     nextCheckAt?: Date;
-  }
+  },
 ): Promise<void> {
   logger.info("Creating game record", { gameId: key.gameId.toString() });
 
@@ -108,14 +104,14 @@ export async function createGame(
       data.currentPhase || "idle",
       data.status || "active",
       data.nextCheckAt || new Date(),
-    ]
+    ],
   );
 }
 
 export async function getGame(key: GameKey): Promise<GameRecord | null> {
   const result = await query<GameRecord>(
     `SELECT * FROM games WHERE chain_id = $1 AND contract_address = $2 AND game_id = $3`,
-    [key.chainId, key.contractAddress, key.gameId.toString()]
+    [key.chainId, key.contractAddress, key.gameId.toString()],
   );
 
   if (result.rows.length === 0) {
@@ -145,7 +141,7 @@ export async function updateGame(
     pendingMoveY: number | null;
     lastError: string | null;
     isPlayer1: boolean;
-  }>
+  }>,
 ): Promise<void> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
@@ -215,19 +211,16 @@ export async function updateGame(
   await query(
     `UPDATE games SET ${setClauses.join(", ")}
      WHERE chain_id = $${paramIndex++} AND contract_address = $${paramIndex++} AND game_id = $${paramIndex}`,
-    values
+    values,
   );
 }
 
-export async function getActiveGames(
-  chainId: number,
-  contractAddress: string
-): Promise<GameRecord[]> {
+export async function getActiveGames(chainId: number, contractAddress: string): Promise<GameRecord[]> {
   const result = await query<GameRecord>(
     `SELECT * FROM games 
      WHERE chain_id = $1 AND contract_address = $2 AND status = 'active'
      ORDER BY created_at ASC`,
-    [chainId, contractAddress]
+    [chainId, contractAddress],
   );
 
   return result.rows.map((row) => ({
@@ -236,17 +229,14 @@ export async function getActiveGames(
   }));
 }
 
-export async function getGamesReadyToCheck(
-  chainId: number,
-  contractAddress: string
-): Promise<GameRecord[]> {
+export async function getGamesReadyToCheck(chainId: number, contractAddress: string): Promise<GameRecord[]> {
   const result = await query<GameRecord>(
     `SELECT * FROM games 
      WHERE chain_id = $1 AND contract_address = $2 
        AND status = 'active' 
        AND (next_check_at IS NULL OR next_check_at <= NOW())
      ORDER BY next_check_at ASC NULLS FIRST`,
-    [chainId, contractAddress]
+    [chainId, contractAddress],
   );
 
   return result.rows.map((row) => ({
@@ -255,17 +245,14 @@ export async function getGamesReadyToCheck(
   }));
 }
 
-export async function getGamesWaitingForOpponent(
-  chainId: number,
-  contractAddress: string
-): Promise<GameRecord[]> {
+export async function getGamesWaitingForOpponent(chainId: number, contractAddress: string): Promise<GameRecord[]> {
   const result = await query<GameRecord>(
     `SELECT * FROM games 
      WHERE chain_id = $1 AND contract_address = $2 
        AND status = 'active' 
        AND current_phase = 'waiting_for_opponent'
      ORDER BY created_at ASC`,
-    [chainId, contractAddress]
+    [chainId, contractAddress],
   );
 
   return result.rows.map((row) => ({
@@ -283,7 +270,7 @@ export async function addAttemptedMove(
   x: number,
   y: number,
   round: number,
-  txHash?: string
+  txHash?: string,
 ): Promise<void> {
   logger.debug("Adding attempted move", {
     gameId: key.gameId.toString(),
@@ -298,7 +285,7 @@ export async function addAttemptedMove(
      ON CONFLICT (chain_id, contract_address, game_id, x, y, round) DO UPDATE SET
        tx_hash = COALESCE(EXCLUDED.tx_hash, attempted_moves.tx_hash),
        status = 'pending'`,
-    [key.chainId, key.contractAddress, key.gameId.toString(), x, y, round, txHash || null]
+    [key.chainId, key.contractAddress, key.gameId.toString(), x, y, round, txHash || null],
   );
 }
 
@@ -307,12 +294,12 @@ export async function updateAttemptedMoveStatus(
   x: number,
   y: number,
   round: number,
-  status: "pending" | "confirmed" | "invalid" | "collision"
+  status: "pending" | "confirmed" | "invalid" | "collision",
 ): Promise<void> {
   await query(
     `UPDATE attempted_moves SET status = $1
      WHERE chain_id = $2 AND contract_address = $3 AND game_id = $4 AND x = $5 AND y = $6 AND round = $7`,
-    [status, key.chainId, key.contractAddress, key.gameId.toString(), x, y, round]
+    [status, key.chainId, key.contractAddress, key.gameId.toString(), x, y, round],
   );
 }
 
@@ -321,7 +308,7 @@ export async function getAttemptedMoves(key: GameKey): Promise<AttemptedMoveReco
     `SELECT * FROM attempted_moves 
      WHERE chain_id = $1 AND contract_address = $2 AND game_id = $3
      ORDER BY round ASC, created_at ASC`,
-    [key.chainId, key.contractAddress, key.gameId.toString()]
+    [key.chainId, key.contractAddress, key.gameId.toString()],
   );
 
   return result.rows.map((row) => ({
@@ -335,7 +322,7 @@ export async function getConfirmedMoves(key: GameKey): Promise<AttemptedMoveReco
     `SELECT * FROM attempted_moves 
      WHERE chain_id = $1 AND contract_address = $2 AND game_id = $3 AND status = 'confirmed'
      ORDER BY round ASC`,
-    [key.chainId, key.contractAddress, key.gameId.toString()]
+    [key.chainId, key.contractAddress, key.gameId.toString()],
   );
 
   return result.rows.map((row) => ({
@@ -348,14 +335,11 @@ export async function getConfirmedMoves(key: GameKey): Promise<AttemptedMoveReco
 // Transaction Marker Operations
 // ============================================================================
 
-export async function getTxMarker(
-  key: GameKey,
-  action: string
-): Promise<TxMarkerRecord | null> {
+export async function getTxMarker(key: GameKey, action: string): Promise<TxMarkerRecord | null> {
   const result = await query<TxMarkerRecord>(
     `SELECT * FROM tx_markers 
      WHERE chain_id = $1 AND contract_address = $2 AND game_id = $3 AND action = $4`,
-    [key.chainId, key.contractAddress, key.gameId.toString(), action]
+    [key.chainId, key.contractAddress, key.gameId.toString(), action],
   );
 
   if (result.rows.length === 0) {
@@ -378,7 +362,7 @@ export async function setTxMarker(
     txStatus?: "pending" | "confirmed" | "failed" | "dropped";
     blockNumber?: bigint;
     paramsHash?: string;
-  }
+  },
 ): Promise<void> {
   logger.debug("Setting tx marker", {
     gameId: key.gameId.toString(),
@@ -403,7 +387,7 @@ export async function setTxMarker(
       data.txStatus || "pending",
       data.blockNumber?.toString() || null,
       data.paramsHash || null,
-    ]
+    ],
   );
 }
 
@@ -413,7 +397,7 @@ export async function updateTxMarker(
   updates: Partial<{
     txStatus: "pending" | "confirmed" | "failed" | "dropped";
     blockNumber: bigint;
-  }>
+  }>,
 ): Promise<void> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
@@ -438,7 +422,7 @@ export async function updateTxMarker(
     `UPDATE tx_markers SET ${setClauses.join(", ")}
      WHERE chain_id = $${paramIndex++} AND contract_address = $${paramIndex++} 
        AND game_id = $${paramIndex++} AND action = $${paramIndex}`,
-    values
+    values,
   );
 }
 
@@ -446,7 +430,7 @@ export async function clearTxMarker(key: GameKey, action: string): Promise<void>
   await query(
     `DELETE FROM tx_markers 
      WHERE chain_id = $1 AND contract_address = $2 AND game_id = $3 AND action = $4`,
-    [key.chainId, key.contractAddress, key.gameId.toString(), action]
+    [key.chainId, key.contractAddress, key.gameId.toString(), action],
   );
 }
 
@@ -491,7 +475,7 @@ export function dbRecordToAgentState(record: GameRecord): Partial<AgentState> {
 export async function saveGameState(
   key: GameKey,
   state: AgentState,
-  scheduling?: { nextCheckAt?: Date }
+  scheduling?: { nextCheckAt?: Date },
 ): Promise<void> {
   const updates = agentStateToDbUpdates(state);
 
@@ -527,4 +511,3 @@ export async function loadGameState(key: GameKey): Promise<Partial<AgentState> |
 
   return state;
 }
-

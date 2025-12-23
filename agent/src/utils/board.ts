@@ -10,7 +10,7 @@ export const BOARD_SIZE = 4;
  * @param x - Column index (0-3)
  * @param y - Row index (0-3)
  * @returns Cell value at position (x, y)
- * 
+ *
  * IMPORTANT: board[y][x] = board[row][col]
  */
 export function getCell(board: number[][], x: number, y: number): number {
@@ -23,7 +23,7 @@ export function getCell(board: number[][], x: number, y: number): number {
  * @param x - Column index (0-3)
  * @param y - Row index (0-3)
  * @param value - Value to set (0=Empty, 1=Player1, 2=Player2)
- * 
+ *
  * IMPORTANT: board[y][x] = board[row][col]
  */
 export function setCell(board: number[][], x: number, y: number, value: number): void {
@@ -110,11 +110,7 @@ export function getEmptyCells(board: number[][]): { x: number; y: number }[] {
  * @param player2Symbol - Symbol for player 2 (default "O")
  * @returns Formatted string representation of the board
  */
-export function formatBoard(
-  board: number[][],
-  player1Symbol = "X",
-  player2Symbol = "O"
-): string {
+export function formatBoard(board: number[][], player1Symbol = "X", player2Symbol = "O"): string {
   const symbols: Record<number, string> = {
     0: "·",
     1: player1Symbol,
@@ -124,15 +120,14 @@ export function formatBoard(
   const lines: string[] = [];
   lines.push("  0 1 2 3  (x)");
   lines.push("┌───────────┐");
-  
+
   for (let y = 0; y < BOARD_SIZE; y++) {
     const row = board[y].map((cell) => symbols[cell] || "?").join(" ");
     lines.push(`│ ${row} │ ${y}`);
   }
-  
+
   lines.push("└───────────┘");
   lines.push("(y)");
 
   return lines.join("\n");
 }
-

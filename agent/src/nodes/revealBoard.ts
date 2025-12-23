@@ -36,7 +36,7 @@ export async function revealBoard(state: AgentState): Promise<Partial<AgentState
   if (boardRevealed) {
     logger.info("Board already revealed on-chain");
     logBoard(currentGame.board as number[][], isPlayer1);
-    
+
     // Log final outcome
     logOutcome(winner, isPlayer1);
 
@@ -69,7 +69,7 @@ export async function revealBoard(state: AgentState): Promise<Partial<AgentState
       if (txStatus.status === "success") {
         logger.info("Previous revealBoard transaction succeeded");
         await gameStore.updateTxMarker(gameKey, "revealBoard", { txStatus: "confirmed" });
-        
+
         // Re-fetch and display the revealed board
         const updatedGame = await contract.getGame(gameId);
         logBoard(updatedGame.board as number[][], isPlayer1);

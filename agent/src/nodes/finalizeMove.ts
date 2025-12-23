@@ -32,16 +32,10 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
   // =========================================================================
   if (myMove.isMade) {
     logger.info("Move already finalized on-chain, proceeding");
-    
+
     // Update attempted move status if we have a pending move
     if (pendingMove) {
-      await gameStore.updateAttemptedMoveStatus(
-        gameKey,
-        pendingMove.x,
-        pendingMove.y,
-        currentRound,
-        "confirmed"
-      );
+      await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "confirmed");
     }
 
     return {
@@ -80,7 +74,7 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
       if (txStatus.status === "success") {
         logger.info("Previous finalizeMove transaction succeeded");
         await gameStore.updateTxMarker(gameKey, "finalizeMove", { txStatus: "confirmed" });
-        
+
         // Re-fetch move state to see result
         const [move1, move2] = await contract.getMoves(gameId);
         const game = await contract.getGame(gameId);
@@ -90,13 +84,7 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
         if (updatedMyMove.isMade) {
           // Move was valid and made
           if (pendingMove) {
-            await gameStore.updateAttemptedMoveStatus(
-              gameKey,
-              pendingMove.x,
-              pendingMove.y,
-              currentRound,
-              "confirmed"
-            );
+            await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "confirmed");
           }
           return {
             currentPhase: GamePhase.WaitingForOpponentMove,
@@ -107,13 +95,7 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
         } else {
           // Move was invalid
           if (pendingMove) {
-            await gameStore.updateAttemptedMoveStatus(
-              gameKey,
-              pendingMove.x,
-              pendingMove.y,
-              currentRound,
-              "invalid"
-            );
+            await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "invalid");
           }
           return {
             currentPhase: GamePhase.SelectingMove,
@@ -162,15 +144,9 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
     if (isInvalid) {
       // Move was invalid (tried to play on occupied cell)
       logger.warn("Move was invalid! Need to select a new move.");
-      
+
       if (pendingMove) {
-        await gameStore.updateAttemptedMoveStatus(
-          gameKey,
-          pendingMove.x,
-          pendingMove.y,
-          currentRound,
-          "invalid"
-        );
+        await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "invalid");
       }
 
       return {
@@ -184,13 +160,7 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
     logger.info("Move finalized successfully");
 
     if (pendingMove) {
-      await gameStore.updateAttemptedMoveStatus(
-        gameKey,
-        pendingMove.x,
-        pendingMove.y,
-        currentRound,
-        "confirmed"
-      );
+      await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "confirmed");
     }
 
     const newMove = pendingMove ? { x: pendingMove.x, y: pendingMove.y, round: currentRound } : null;

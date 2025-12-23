@@ -68,11 +68,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
     // Helper to determine if we should reset the waiting timer
     // Reset when transitioning FROM a waiting phase TO a non-waiting phase
     const shouldResetWaiting = (newPhase: GamePhase): boolean => {
-      const waitingPhases = [
-        GamePhase.WaitingForOpponent,
-        GamePhase.WaitingForOpponentMove,
-        GamePhase.Idle,
-      ];
+      const waitingPhases = [GamePhase.WaitingForOpponent, GamePhase.WaitingForOpponentMove, GamePhase.Idle];
       const wasWaiting = waitingPhases.includes(previousPhase);
       const isWaiting = waitingPhases.includes(newPhase);
       return wasWaiting && !isWaiting;

@@ -32,7 +32,7 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
   // =========================================================================
   // Re-fetch game state to get latest
   const currentGame = await contract.getGame(gameId);
-  
+
   if (currentGame.winner !== Winner.None) {
     logger.info("Game already has a winner, proceeding to reveal", { winner: currentGame.winner });
     return {
@@ -70,10 +70,10 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
       if (txStatus.status === "success") {
         logger.info("Previous finalizeGameState transaction succeeded");
         await gameStore.updateTxMarker(gameKey, "finalizeGameState", { txStatus: "confirmed" });
-        
+
         // Re-fetch game state to see result
         const updatedGame = await contract.getGame(gameId);
-        
+
         if (updatedGame.winner !== Winner.None) {
           return {
             currentPhase: GamePhase.RevealingBoard,
@@ -82,22 +82,16 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
             game: updatedGame,
           };
         }
-        
+
         // Check for collision by seeing if moves were reset
         const [move1, move2] = await contract.getMoves(gameId);
         if (!move1.isSubmitted && !move2.isSubmitted) {
           // Moves were cleared - likely a collision occurred
           logger.info("Collision detected - moves were reset");
-          
+
           // Mark pending move as collision
           if (pendingMove) {
-            await gameStore.updateAttemptedMoveStatus(
-              gameKey,
-              pendingMove.x,
-              pendingMove.y,
-              currentRound,
-              "collision"
-            );
+            await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "collision");
           }
 
           return {
@@ -106,7 +100,7 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
             game: updatedGame,
           };
         }
-        
+
         // No winner, no collision - continue
         return {
           currentPhase: GamePhase.SelectingMove,
@@ -154,16 +148,10 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
     // =========================================================================
     if (collision) {
       logger.info("Collision occurred! Both players chose the same cell.");
-      
+
       // Mark pending move as collision
       if (pendingMove) {
-        await gameStore.updateAttemptedMoveStatus(
-          gameKey,
-          pendingMove.x,
-          pendingMove.y,
-          currentRound,
-          "collision"
-        );
+        await gameStore.updateAttemptedMoveStatus(gameKey, pendingMove.x, pendingMove.y, currentRound, "collision");
       }
 
       return {
