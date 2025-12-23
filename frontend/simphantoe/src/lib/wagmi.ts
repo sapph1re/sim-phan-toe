@@ -37,11 +37,16 @@ const connectors = connectorsForWallets(
 );
 
 // Wagmi config used with RainbowKit for external wallets
+// Set pollingInterval to 10 seconds to reduce RPC spam (default is ~4 seconds)
+// This affects useWatchContractEvent and other polling operations
 export const config = createConfig({
   connectors,
   chains: [sepolia],
+  pollingInterval: 10_000, // 10 seconds - reduces event watching frequency
   transports: {
-    [sepolia.id]: http(SEPOLIA_RPC_URL),
+    [sepolia.id]: http(SEPOLIA_RPC_URL, {
+      batch: true, // Batch multiple RPC calls into single requests
+    }),
   },
 });
 
@@ -50,7 +55,9 @@ export const chains = [sepolia] as const;
 
 // Transport configuration for Privy's wagmi adapter
 export const transports = {
-  [sepolia.id]: http(SEPOLIA_RPC_URL),
+  [sepolia.id]: http(SEPOLIA_RPC_URL, {
+    batch: true, // Batch multiple RPC calls into single requests
+  }),
 };
 
 declare module "wagmi" {

@@ -89,7 +89,8 @@ export function useGameCount() {
 }
 
 // Hook to get a specific game by ID
-export function useGame(gameId: bigint | undefined) {
+// refetchInterval can be set to false to disable polling (useful for finished games)
+export function useGame(gameId: bigint | undefined, options?: { refetchInterval?: number | false }) {
   const { address } = useContractAddress();
   return useReadContract({
     address,
@@ -98,7 +99,7 @@ export function useGame(gameId: bigint | undefined) {
     args: gameId !== undefined ? [gameId] : undefined,
     query: {
       enabled: !!address && gameId !== undefined,
-      refetchInterval: 3000,
+      refetchInterval: options?.refetchInterval ?? 8000, // 8 seconds - reduced from 3s to limit RPC spam
     },
   });
 }
@@ -112,7 +113,7 @@ export function useOpenGames() {
     functionName: "getOpenGames",
     query: {
       enabled: !!address,
-      refetchInterval: 5000,
+      refetchInterval: 15000, // 15 seconds - lobby doesn't need frequent updates
     },
   });
 }
@@ -127,13 +128,14 @@ export function usePlayerGames(playerAddress: `0x${string}` | undefined) {
     args: playerAddress ? [playerAddress] : undefined,
     query: {
       enabled: !!address && !!playerAddress,
-      refetchInterval: 5000,
+      refetchInterval: 15000, // 15 seconds - lobby doesn't need frequent updates
     },
   });
 }
 
 // Hook to get both players' moves
-export function useMoves(gameId: bigint | undefined) {
+// refetchInterval can be set to false to disable polling (useful for finished games)
+export function useMoves(gameId: bigint | undefined, options?: { refetchInterval?: number | false }) {
   const { address } = useContractAddress();
   return useReadContract({
     address,
@@ -142,13 +144,18 @@ export function useMoves(gameId: bigint | undefined) {
     args: gameId !== undefined ? [gameId] : undefined,
     query: {
       enabled: !!address && gameId !== undefined,
-      refetchInterval: 2000,
+      refetchInterval: options?.refetchInterval ?? 8000, // 8 seconds - reduced from 2s to limit RPC spam
     },
   });
 }
 
 // Hook to check if player can submit a move
-export function useCanSubmitMove(gameId: bigint | undefined, playerAddress: `0x${string}` | undefined) {
+// refetchInterval can be set to false to disable polling (useful for finished games)
+export function useCanSubmitMove(
+  gameId: bigint | undefined,
+  playerAddress: `0x${string}` | undefined,
+  options?: { refetchInterval?: number | false },
+) {
   const { address } = useContractAddress();
   return useReadContract({
     address,
@@ -157,7 +164,7 @@ export function useCanSubmitMove(gameId: bigint | undefined, playerAddress: `0x$
     args: gameId !== undefined && playerAddress ? [gameId, playerAddress] : undefined,
     query: {
       enabled: !!address && gameId !== undefined && !!playerAddress,
-      refetchInterval: 2000,
+      refetchInterval: options?.refetchInterval ?? 8000, // 8 seconds - reduced from 2s to limit RPC spam
     },
   });
 }
@@ -435,13 +442,17 @@ export function useRevealBoard() {
 }
 
 // Hook to watch for game events
-export function useGameEvents(gameId: bigint | undefined) {
+// Accepts optional flags to disable event watching when not needed (e.g., finished games)
+export function useGameEvents(gameId: bigint | undefined, options?: { enabled?: boolean }) {
   const { address } = useContractAddress();
   const queryClient = useQueryClient();
   const [lastEvent, setLastEvent] = useState<{
     type: "submitted" | "invalid" | "made" | "processed" | "collision" | "updated" | "joined" | "revealed";
     data: unknown;
   } | null>(null);
+
+  // Allow external control of whether event watching is enabled
+  const isEnabled = options?.enabled !== false && !!address && gameId !== undefined;
 
   useWatchContractEvent({
     address,
@@ -454,7 +465,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -468,7 +479,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -482,7 +493,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -496,7 +507,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -510,7 +521,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -524,7 +535,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -538,7 +549,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   useWatchContractEvent({
@@ -552,7 +563,7 @@ export function useGameEvents(gameId: bigint | undefined) {
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
-    enabled: !!address && gameId !== undefined,
+    enabled: isEnabled,
   });
 
   return { lastEvent, clearEvent: () => setLastEvent(null) };
@@ -561,10 +572,17 @@ export function useGameEvents(gameId: bigint | undefined) {
 // Main hook for managing the current player's game state
 export function useCurrentPlayerGameState(gameId: bigint | undefined) {
   const { address: playerAddress } = useAccount();
-  const { data: game, isLoading: gameLoading, refetch: refetchGame } = useGame(gameId);
-  const { data: moves, isLoading: movesLoading, refetch: refetchMoves } = useMoves(gameId);
-  const { data: canSubmit } = useCanSubmitMove(gameId, playerAddress);
   const { isLoading: fheLoading } = useFHE();
+
+  // Track if game is finished and board revealed to disable polling
+  const [gameFullyComplete, setGameFullyComplete] = useState(false);
+
+  // Disable polling for fully complete games (finished + board revealed)
+  const refetchInterval = gameFullyComplete ? false : undefined;
+
+  const { data: game, isLoading: gameLoading, refetch: refetchGame } = useGame(gameId, { refetchInterval });
+  const { data: moves, isLoading: movesLoading, refetch: refetchMoves } = useMoves(gameId, { refetchInterval });
+  const { data: canSubmit } = useCanSubmitMove(gameId, playerAddress, { refetchInterval });
 
   // Local move tracking - persisted to localStorage per game/player
   const { moves: myLocalMoves, setMoves: setMyLocalMoves } = usePersistedMoves(gameId, playerAddress);
@@ -607,6 +625,13 @@ export function useCurrentPlayerGameState(gameId: bigint | undefined) {
       setGamePhase(GamePhase.ProcessingMoves);
     }
   }, [game, isPlayer, waitingForOpponent, myMoveSubmitted, myMoveMade, opponentMoveMade]);
+
+  // Stop polling once game is fully complete (finished + board revealed)
+  useEffect(() => {
+    if (game && isGameFinished(game) && isBoardRevealed(game)) {
+      setGameFullyComplete(true);
+    }
+  }, [game]);
 
   // Add a local move (when player selects a cell)
   const addLocalMove = useCallback((x: number, y: number) => {
@@ -680,7 +705,12 @@ export function useGameFlow(gameId: bigint | undefined) {
   const { finalizeMove, isPending: isFinalizing, isDecrypting: isDecryptingMove } = useFinalizeMove();
   const { finalizeGameState, isPending: isFinalizingState, isDecrypting: isDecryptingState } = useFinalizeGameState();
   const { revealBoard, isPending: isRevealingBoard, isDecrypting: isDecryptingBoard } = useRevealBoard();
-  const { lastEvent, clearEvent } = useGameEvents(gameId);
+
+  // Disable event watching for finished games with revealed boards to reduce RPC spam
+  const gameFinishedAndRevealed = gameState.game
+    ? isGameFinished(gameState.game) && isBoardRevealed(gameState.game)
+    : false;
+  const { lastEvent, clearEvent } = useGameEvents(gameId, { enabled: !gameFinishedAndRevealed });
 
   const [fheStatus, setFheStatus] = useState<{
     type: string;
@@ -695,6 +725,9 @@ export function useGameFlow(gameId: bigint | undefined) {
   const [canRetry, setCanRetry] = useState(false);
   const [pendingRetryAction, setPendingRetryAction] = useState<(() => Promise<void>) | null>(null);
   const [boardRevealed, setBoardRevealed] = useState(false);
+
+  // State trigger to force effect re-runs (refs don't trigger re-renders)
+  const [revealBoardTrigger, setRevealBoardTrigger] = useState(0);
 
   // Track if we need to auto-finalize
   const needsFinalizeMoveRef = useRef(false);
@@ -1029,7 +1062,7 @@ export function useGameFlow(gameId: bigint | undefined) {
     }
 
     autoRevealBoard();
-  }, [gameId, gameState.game, revealBoard, gameState.refetchGame]);
+  }, [gameId, gameState.game, revealBoard, gameState.refetchGame, revealBoardTrigger]);
 
   // Handle events
   useEffect(() => {
@@ -1111,6 +1144,8 @@ export function useGameFlow(gameId: bigint | undefined) {
   // Manual trigger for board reveal
   const handleRevealBoard = useCallback(() => {
     needsRevealBoardRef.current = true;
+    // Trigger state change to force the effect to re-run (refs don't cause re-renders)
+    setRevealBoardTrigger((prev) => prev + 1);
   }, []);
 
   return {
