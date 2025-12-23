@@ -7,7 +7,7 @@ import { type AgentState, GamePhase, Winner, ZERO_ADDRESS, ZERO_BYTES32 } from "
 const logger = createLogger("CheckGameState");
 
 export async function checkGameState(state: AgentState): Promise<Partial<AgentState>> {
-  const { gameId, playerAddress } = state;
+  const { gameId, playerAddress, currentPhase: previousPhase } = state;
 
   if (gameId === null || !playerAddress) {
     logger.warn("No game ID or player address set");
@@ -65,6 +65,19 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
       retryCount: 0,
     };
 
+    // Helper to determine if we should reset the waiting timer
+    // Reset when transitioning FROM a waiting phase TO a non-waiting phase
+    const shouldResetWaiting = (newPhase: GamePhase): boolean => {
+      const waitingPhases = [
+        GamePhase.WaitingForOpponent,
+        GamePhase.WaitingForOpponentMove,
+        GamePhase.Idle,
+      ];
+      const wasWaiting = waitingPhases.includes(previousPhase);
+      const isWaiting = waitingPhases.includes(newPhase);
+      return wasWaiting && !isWaiting;
+    };
+
     // Check game phase in order of priority
 
     // 1. Game is finished - check if board needs revealing
@@ -80,12 +93,14 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
           currentPhase: GamePhase.GameComplete,
           winner: game.winner as Winner,
           shouldContinue: false,
+          waitingSince: null, // Clear waiting timer
         };
       } else {
         return {
           ...baseUpdate,
           currentPhase: GamePhase.RevealingBoard,
           winner: game.winner as Winner,
+          waitingSince: null, // Clear waiting timer
         };
       }
     }
@@ -96,6 +111,8 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
       return {
         ...baseUpdate,
         currentPhase: GamePhase.WaitingForOpponent,
+        // Keep existing waitingSince if already waiting, otherwise set now
+        waitingSince: previousPhase === GamePhase.WaitingForOpponent ? state.waitingSince : null,
       };
     }
 
@@ -107,6 +124,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
         return {
           ...baseUpdate,
           currentPhase: GamePhase.FinalizingGameState,
+          waitingSince: null, // Clear waiting timer - we're taking action
         };
       }
     }
@@ -117,6 +135,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
       return {
         ...baseUpdate,
         currentPhase: GamePhase.FinalizingMove,
+        waitingSince: null, // Clear waiting timer - we're taking action
       };
     }
 
@@ -126,6 +145,8 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
       return {
         ...baseUpdate,
         currentPhase: GamePhase.WaitingForOpponentMove,
+        // Keep existing waitingSince if already waiting for opponent move, otherwise set null (will be set by waitForOpponent node)
+        waitingSince: previousPhase === GamePhase.WaitingForOpponentMove ? state.waitingSince : null,
       };
     }
 
@@ -136,6 +157,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
       return {
         ...baseUpdate,
         currentPhase: GamePhase.SelectingMove,
+        waitingSince: null, // Clear waiting timer - we're selecting a move
       };
     }
 
@@ -144,6 +166,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
     return {
       ...baseUpdate,
       currentPhase: GamePhase.WaitingForOpponentMove,
+      waitingSince: previousPhase === GamePhase.WaitingForOpponentMove ? state.waitingSince : null,
     };
   } catch (error) {
     logger.error("Failed to check game state", error);

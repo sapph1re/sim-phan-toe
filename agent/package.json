@@ -8,6 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "orchestrate": "tsx src/index.ts orchestrate",
+    "db-init": "tsx src/index.ts db-init",
     "find-game": "tsx src/index.ts find-game",
     "join-game": "tsx src/index.ts join-game",
     "create-game": "tsx src/index.ts create-game",
@@ -20,10 +22,13 @@
     "@zama-fhe/relayer-sdk": "0.3.0-5",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
-    "viem": "^2.21.54"
+    "pg": "^8.13.1",
+    "viem": "^2.21.54",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

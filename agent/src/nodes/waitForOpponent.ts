@@ -1,34 +1,49 @@
-// Wait for opponent node - polls for game state changes
+// Wait for opponent node - logs waiting status and tracks timing
+// The orchestrator handles actual scheduling and abandonment logic
+// This node just updates state and returns - no sleeping here!
 
 import { createLogger } from "../utils/logger.js";
-import { sleep } from "../utils/retry.js";
 import { type AgentState, GamePhase } from "../state.js";
 
 const logger = createLogger("WaitForOpponent");
 
-// Get polling interval from env or default to 5 seconds
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || "5000", 10);
-
 export async function waitForOpponent(state: AgentState): Promise<Partial<AgentState>> {
-  const { currentPhase, gameId } = state;
+  const { currentPhase, gameId, waitingSince } = state;
 
-  logger.debug("Waiting for opponent...", {
-    phase: currentPhase,
-    gameId: gameId?.toString(),
-  });
+  // Initialize waiting timestamp if not set
+  const now = Date.now();
+  const newWaitingSince = waitingSince ?? now;
 
-  // Log a nice message based on phase
+  // Calculate how long we've been waiting
+  const waitingMs = now - newWaitingSince;
+  const waitingMinutes = Math.floor(waitingMs / 60000);
+  const waitingHours = (waitingMs / (1000 * 60 * 60)).toFixed(1);
+
+  // Log what we're waiting for (informational only - no errors for waiting!)
   if (currentPhase === GamePhase.WaitingForOpponent) {
-    logger.info("Waiting for an opponent to join the game...");
+    if (waitingMinutes < 1) {
+      logger.info(`Waiting for opponent to join game ${gameId}...`);
+    } else if (waitingMinutes < 60) {
+      logger.info(`Still waiting for opponent to join game ${gameId}`, { waitingMinutes });
+    } else {
+      logger.info(`Still waiting for opponent to join game ${gameId}`, { waitingHours: `${waitingHours}h` });
+    }
   } else if (currentPhase === GamePhase.WaitingForOpponentMove) {
-    logger.info("Waiting for opponent to make their move...");
+    if (waitingMinutes < 1) {
+      logger.info(`Waiting for opponent's move in game ${gameId}...`);
+    } else if (waitingMinutes < 60) {
+      logger.info(`Waiting for opponent's move in game ${gameId}`, { waitingMinutes });
+    } else {
+      logger.info(`Waiting for opponent's move in game ${gameId}`, { waitingHours: `${waitingHours}h` });
+    }
+  } else if (currentPhase === GamePhase.Idle) {
+    logger.debug("Waiting in idle state");
   }
 
-  // Wait before checking again
-  await sleep(POLL_INTERVAL);
-
-  // Return to check game state
+  // Return updated waiting timestamp
+  // The orchestrator handles the actual scheduling (next_check_at in DB)
+  // No need to sleep here - the orchestrator will call us again when it's time
   return {
-    // Just return empty - the router will send us back to checkGameState
+    waitingSince: newWaitingSince,
   };
 }

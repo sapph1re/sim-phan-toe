@@ -5,6 +5,7 @@ import {
   createWalletClient,
   http,
   getContract,
+  parseEventLogs,
   type PublicClient,
   type WalletClient,
   type GetContractReturnType,
@@ -379,21 +380,46 @@ export class ContractService {
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     logger.debug("Transaction confirmed", { blockNumber: receipt.blockNumber });
 
-    // Parse GameStarted event to get gameId
-    const gameStartedLog = receipt.logs.find((log) => {
-      try {
-        const topics = log.topics;
-        // GameStarted event signature
-        return topics[0] === "0x7d07a8d39e6f0c2e1b6f6c0ed7c2c1b0a9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4";
-      } catch {
-        return false;
-      }
+    // Parse GameStarted event from receipt logs using ABI decoding
+    // This is the correct way - don't use gameCount - 1 (race condition!)
+    const logs = parseEventLogs({
+      abi: SIMPHANTOE_ABI,
+      logs: receipt.logs,
+      eventName: "GameStarted",
     });
 
-    // Get the latest game count to determine the new game ID
-    const gameCount = await this.getGameCount();
-    const gameId = gameCount - 1n;
+    if (logs.length === 0) {
+      // Fallback: if event parsing fails, try to re-query logs
+      logger.warn("GameStarted event not found in receipt, attempting fallback query...");
+      
+      const blockLogs = await this.publicClient.getLogs({
+        address: this.contractAddress,
+        event: {
+          type: "event",
+          name: "GameStarted",
+          inputs: [
+            { name: "gameId", type: "uint256", indexed: true },
+            { name: "player1", type: "address", indexed: true },
+          ],
+        },
+        fromBlock: receipt.blockNumber,
+        toBlock: receipt.blockNumber,
+      });
 
+      const ourLog = blockLogs.find(
+        (log) => log.transactionHash === txHash
+      );
+
+      if (!ourLog || !ourLog.args.gameId) {
+        throw new Error("GameStarted event not found in transaction receipt or block logs");
+      }
+
+      const gameId = ourLog.args.gameId;
+      logger.info("Game started (from block logs)", { gameId: gameId.toString(), txHash });
+      return { txHash, gameId };
+    }
+
+    const gameId = logs[0].args.gameId;
     logger.info("Game started", { gameId: gameId.toString(), txHash });
 
     return { txHash, gameId };
@@ -516,6 +542,157 @@ export class ContractService {
     logger.info("Board revealed", { gameId: gameId.toString(), txHash });
 
     return txHash;
+  }
+
+  // ============================================================================
+  // Transaction Status & Simulation Helpers
+  // ============================================================================
+
+  /**
+   * Check the status of a transaction by hash
+   * Returns the receipt if mined, null if pending/not found
+   */
+  async getTransactionStatus(txHash: `0x${string}`): Promise<{
+    status: "success" | "reverted" | "pending" | "not_found";
+    blockNumber?: bigint;
+  }> {
+    try {
+      const receipt = await this.publicClient.getTransactionReceipt({ hash: txHash });
+      return {
+        status: receipt.status === "success" ? "success" : "reverted",
+        blockNumber: receipt.blockNumber,
+      };
+    } catch (error) {
+      // Check if transaction exists but not mined yet
+      try {
+        const tx = await this.publicClient.getTransaction({ hash: txHash });
+        if (tx) {
+          return { status: "pending" };
+        }
+      } catch {
+        // Transaction not found
+      }
+      return { status: "not_found" };
+    }
+  }
+
+  /**
+   * Get the current block number
+   */
+  async getCurrentBlock(): Promise<bigint> {
+    return await this.publicClient.getBlockNumber();
+  }
+
+  /**
+   * Simulate a submitMove call to check if it would succeed
+   */
+  async simulateSubmitMove(
+    gameId: bigint,
+    encryptedX: `0x${string}`,
+    encryptedY: `0x${string}`,
+    inputProof: `0x${string}`
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.publicClient.simulateContract({
+        address: this.contractAddress,
+        abi: SIMPHANTOE_ABI,
+        functionName: "submitMove",
+        args: [gameId, encryptedX, encryptedY, inputProof],
+        account: this.account,
+      });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Simulate a finalizeMove call to check if it would succeed
+   */
+  async simulateFinalizeMove(
+    gameId: bigint,
+    player: `0x${string}`,
+    isInvalid: boolean,
+    decryptionProof: `0x${string}`
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.publicClient.simulateContract({
+        address: this.contractAddress,
+        abi: SIMPHANTOE_ABI,
+        functionName: "finalizeMove",
+        args: [gameId, player, isInvalid, decryptionProof],
+        account: this.account,
+      });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Simulate a finalizeGameState call to check if it would succeed
+   */
+  async simulateFinalizeGameState(
+    gameId: bigint,
+    winner: number,
+    collision: boolean,
+    decryptionProof: `0x${string}`
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.publicClient.simulateContract({
+        address: this.contractAddress,
+        abi: SIMPHANTOE_ABI,
+        functionName: "finalizeGameState",
+        args: [gameId, winner, collision, decryptionProof],
+        account: this.account,
+      });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Simulate a revealBoard call to check if it would succeed
+   */
+  async simulateRevealBoard(
+    gameId: bigint,
+    board: number[][],
+    decryptionProof: `0x${string}`
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.publicClient.simulateContract({
+        address: this.contractAddress,
+        abi: SIMPHANTOE_ABI,
+        functionName: "revealBoard",
+        args: [
+          gameId,
+          board as [
+            [number, number, number, number],
+            [number, number, number, number],
+            [number, number, number, number],
+            [number, number, number, number],
+          ],
+          decryptionProof,
+        ],
+        account: this.account,
+      });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 }
 

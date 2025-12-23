@@ -135,6 +135,18 @@ export const AgentStateAnnotation = Annotation.Root({
     reducer: (_, update) => update,
     default: () => false,
   }),
+
+  // Waiting tracking (timestamp-based for human-friendly delays)
+  waitingSince: Annotation<number | null>({
+    reducer: (_, update) => update,
+    default: () => null,
+  }),
+
+  // DB reference for persistence
+  dbGameKey: Annotation<{ chainId: number; contractAddress: string; gameId: bigint } | null>({
+    reducer: (_, update) => update,
+    default: () => null,
+  }),
 });
 
 // Type for the agent state
@@ -158,6 +170,8 @@ export function createInitialState(playerAddress: `0x${string}`): Partial<AgentS
     retryCount: 0,
     shouldContinue: true,
     collisionOccurred: false,
+    waitingSince: null,
+    dbGameKey: null,
   };
 }
 

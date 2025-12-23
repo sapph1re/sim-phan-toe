@@ -8,6 +8,8 @@ import { createLogger } from "./utils/logger.js";
 import { getContractService } from "./services/contract.js";
 import { buildGraph } from "./graph.js";
 import { createInitialState, GamePhase, Winner } from "./state.js";
+import { initializeDatabase, closePool } from "./persistence/db.js";
+import { createOrchestrator } from "./orchestrator.js";
 
 // Increase max listeners to prevent warnings during long polling sessions
 // This is needed because each HTTP request adds abort signal listeners
@@ -20,10 +22,74 @@ const program = new Command();
 
 program.name("simphantoe-agent").description("AI agent for playing SimPhanToe on Sepolia").version("1.0.0");
 
+// ============================================================================
+// NEW: Orchestrator command - the primary way to run the agent
+// ============================================================================
+
+program
+  .command("orchestrate")
+  .description("Run the multi-game orchestrator (recommended: processes all active games)")
+  .action(async () => {
+    try {
+      logger.info("Starting orchestrator mode...");
+
+      // Initialize database
+      await initializeDatabase();
+
+      // Create and run orchestrator
+      const orchestrator = createOrchestrator();
+
+      // Sync existing games from chain
+      await orchestrator.syncGamesFromChain();
+
+      // Handle graceful shutdown
+      const shutdown = async () => {
+        logger.info("Shutting down...");
+        orchestrator.stop();
+        await closePool();
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      // Run orchestrator (runs indefinitely)
+      await orchestrator.run();
+    } catch (error) {
+      logger.error("Orchestrator failed", error);
+      await closePool();
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// NEW: Database initialization command
+// ============================================================================
+
+program
+  .command("db-init")
+  .description("Initialize the PostgreSQL database schema")
+  .action(async () => {
+    try {
+      logger.info("Initializing database...");
+      await initializeDatabase();
+      logger.info("Database initialized successfully!");
+      await closePool();
+    } catch (error) {
+      logger.error("Failed to initialize database", error);
+      await closePool();
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// Legacy single-game commands (kept for backwards compatibility)
+// ============================================================================
+
 // Find and join an open game
 program
   .command("find-game")
-  .description("Find an open game and join it")
+  .description("Find an open game and join it (legacy single-game mode)")
   .action(async () => {
     try {
       logger.info("Looking for open games...");
@@ -58,7 +124,7 @@ program
 // Join a specific game
 program
   .command("join-game <gameId>")
-  .description("Join a specific game by ID")
+  .description("Join a specific game by ID (legacy single-game mode)")
   .action(async (gameIdStr: string) => {
     try {
       const gameId = BigInt(gameIdStr);
@@ -80,7 +146,7 @@ program
 // Create a new game
 program
   .command("create-game")
-  .description("Create a new game and wait for an opponent")
+  .description("Create a new game and wait for an opponent (legacy single-game mode)")
   .action(async () => {
     try {
       logger.info("Creating new game...");
@@ -102,7 +168,7 @@ program
 // Resume playing an existing game
 program
   .command("play <gameId>")
-  .description("Resume playing an existing game")
+  .description("Resume playing an existing game (legacy single-game mode)")
   .action(async (gameIdStr: string) => {
     try {
       const gameId = BigInt(gameIdStr);
@@ -228,7 +294,7 @@ program
 // Auto mode: resume active game or create new one
 program
   .command("auto")
-  .description("Automatically resume an active game, or create a new one if none exist")
+  .description("Automatically resume an active game, or create a new one if none exist (legacy)")
   .action(async () => {
     try {
       const contract = getContractService();
@@ -368,7 +434,7 @@ program
     }
   });
 
-// Main play function
+// Main play function (legacy single-game mode)
 async function playGame(gameId: bigint): Promise<void> {
   const contract = getContractService();
   const playerAddress = contract.address;
