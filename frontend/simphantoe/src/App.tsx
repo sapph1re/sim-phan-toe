@@ -9,6 +9,8 @@ import { config } from "./lib/wagmi";
 import { PRIVY_APP_ID, privyConfig, isPrivyConfigured } from "./lib/privy";
 import { Layout } from "./components/Layout";
 import { FHEProvider } from "./lib/fhe";
+import { TransactionRetryProvider } from "./hooks/useSponsoredTransaction";
+import { TransactionRetryNotice } from "./components/TransactionRetryNotice";
 
 const queryClient = new QueryClient();
 
@@ -27,9 +29,12 @@ function PrivyEnabledApp() {
               overlayBlur: "small",
             })}
           >
-            <FHEProvider>
-              <Layout />
-            </FHEProvider>
+            <TransactionRetryProvider>
+              <FHEProvider>
+                <Layout />
+                <TransactionRetryNotice />
+              </FHEProvider>
+            </TransactionRetryProvider>
           </RainbowKitProvider>
         </PrivyWagmiProvider>
       </QueryClientProvider>
@@ -51,9 +56,12 @@ function RainbowKitOnlyApp() {
             overlayBlur: "small",
           })}
         >
-          <FHEProvider>
-            <Layout />
-          </FHEProvider>
+          <TransactionRetryProvider>
+            <FHEProvider>
+              <Layout />
+              <TransactionRetryNotice />
+            </FHEProvider>
+          </TransactionRetryProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </StandardWagmiProvider>
