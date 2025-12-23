@@ -19,12 +19,20 @@ const CHAIN_ID = 11155111;
 const MAIN_LOOP_DELAY_MS = 1000; // Delay between orchestration cycles
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
+// Balance thresholds
+const LOW_BALANCE_WEI = 50_000_000_000_000_000n; // 0.05 ETH - warning threshold
+const MIN_BALANCE_WEI = 10_000_000_000_000_000n; // 0.01 ETH - stop threshold
+const BALANCE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
+const BALANCE_LOG_INTERVAL_MS = 30 * 60 * 1000; // Log every 30 minutes
+
 export class GameOrchestrator {
   private contractAddress: `0x${string}`;
   private playerAddress: `0x${string}`;
   private eventService: EventService;
   private graph: CompiledGraph;
   private isRunning = false;
+  private lastBalanceCheck = 0;
+  private lastBalanceLog = 0;
 
   constructor() {
     const contract = getContractService();
@@ -84,9 +92,73 @@ export class GameOrchestrator {
   }
 
   /**
+   * Check ETH balance and log periodically
+   * Returns true if balance is sufficient, false if too low to continue
+   */
+  private async checkBalance(): Promise<boolean> {
+    const now = Date.now();
+
+    // Only check every BALANCE_CHECK_INTERVAL_MS to avoid RPC spam
+    if (now - this.lastBalanceCheck < BALANCE_CHECK_INTERVAL_MS) {
+      return true; // Assume OK if we checked recently
+    }
+
+    this.lastBalanceCheck = now;
+
+    try {
+      const contract = getContractService();
+      const balance = await contract.getBalance();
+      const balanceEth = Number(balance) / 1e18;
+
+      // Log balance periodically or if it's low
+      const shouldLog =
+        now - this.lastBalanceLog >= BALANCE_LOG_INTERVAL_MS || this.lastBalanceLog === 0 || balance < LOW_BALANCE_WEI;
+
+      if (shouldLog) {
+        this.lastBalanceLog = now;
+
+        if (balance < MIN_BALANCE_WEI) {
+          logger.error("CRITICAL: Balance too low to continue!", {
+            balance: `${balanceEth.toFixed(6)} ETH`,
+            minimum: "0.01 ETH",
+          });
+        } else if (balance < LOW_BALANCE_WEI) {
+          logger.warn("Low balance warning - consider topping up", {
+            balance: `${balanceEth.toFixed(6)} ETH`,
+            warning: "< 0.05 ETH",
+          });
+        } else {
+          logger.info("Agent balance", {
+            balance: `${balanceEth.toFixed(6)} ETH`,
+          });
+        }
+      }
+
+      // Return false if balance is below minimum threshold
+      if (balance < MIN_BALANCE_WEI) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logger.error("Failed to check balance", error);
+      // Don't stop on balance check errors - might be temporary RPC issue
+      return true;
+    }
+  }
+
+  /**
    * Run one orchestration cycle
    */
   private async runOrchestrationCycle(): Promise<void> {
+    // 0. Check balance - stop if too low
+    const hasBalance = await this.checkBalance();
+    if (!hasBalance) {
+      logger.error("Stopping orchestrator due to insufficient balance");
+      this.stop();
+      return;
+    }
+
     // 1. Ensure we have exactly one open game waiting for opponents
     await this.ensureOpenGame();
 
