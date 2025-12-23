@@ -263,18 +263,46 @@ export function useFinalizeMove() {
     async (gameId: bigint, playerAddress: `0x${string}`, isInvalidHandle: `0x${string}`) => {
       if (!contractAddress) throw new Error("Contract not configured");
 
+      console.log("[FinalizeMove] Starting with:", {
+        gameId: gameId.toString(),
+        playerAddress,
+        isInvalidHandle,
+      });
+
       // Step 1: Decrypt the isInvalid flag
       const decrypted = await decrypt([isInvalidHandle]);
       if (!decrypted) throw new Error("Failed to decrypt move validity");
 
       const isInvalid = decrypted.clearValues[isInvalidHandle] as boolean;
 
+      console.log("[FinalizeMove] Decryption result:", {
+        isInvalid,
+        isInvalidType: typeof isInvalid,
+        proofLength: decrypted.decryptionProof?.length || 0,
+        proofPreview: decrypted.decryptionProof?.slice(0, 66) + "...",
+        proofIsHex: decrypted.decryptionProof?.startsWith("0x") || false,
+      });
+
       // Step 2: Call finalizeMove with the decrypted value and proof
+      const contractArgs = [gameId, playerAddress, isInvalid, decrypted.decryptionProof];
+      console.log("[FinalizeMove] Contract call arguments:", {
+        gameId: gameId.toString(),
+        gameIdType: typeof gameId,
+        playerAddress,
+        playerAddressType: typeof playerAddress,
+        isInvalid,
+        isInvalidType: typeof isInvalid,
+        proofLength: decrypted.decryptionProof?.length || 0,
+        proofType: typeof decrypted.decryptionProof,
+        proofStartsWith0x: decrypted.decryptionProof?.startsWith("0x") || false,
+      });
+
+      console.log("[FinalizeMove] Calling writeContractAsync...");
       const txHash = await writeContractAsync({
         address: contractAddress,
         abi: SIMPHANTOE_ABI,
         functionName: "finalizeMove",
-        args: [gameId, playerAddress, isInvalid, decrypted.decryptionProof],
+        args: contractArgs,
       });
 
       // Step 3: Wait for transaction to be mined

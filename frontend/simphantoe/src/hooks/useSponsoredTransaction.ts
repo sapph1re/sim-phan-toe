@@ -68,8 +68,20 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
           });
 
           console.log("[SponsoredTx] Encoded data length:", data.length);
+          console.log("[SponsoredTx] Encoded data (first 100 chars):", data.slice(0, 100));
+          console.log("[SponsoredTx] Contract address:", address);
+          console.log("[SponsoredTx] Chain ID: 11155111 (Sepolia)");
+
+          // Log wallet details for debugging
+          const embeddedWallet = wallets.find((w) => w.walletClientType === "privy");
+          console.log("[SponsoredTx] Embedded wallet:", {
+            address: embeddedWallet?.address,
+            walletClientType: embeddedWallet?.walletClientType,
+            chainId: embeddedWallet?.chainId,
+          });
 
           // Send via Privy's sendTransaction with gas sponsorship enabled
+          console.log("[SponsoredTx] Calling sendTransaction with sponsor: true");
           const txReceipt = await sendTransaction(
             {
               to: address,
@@ -86,6 +98,8 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
           const txHash = txReceipt.hash as `0x${string}`;
 
           console.log("[SponsoredTx] Transaction sent via Privy:", txHash);
+          console.log("[SponsoredTx] Transaction receipt:", txReceipt);
+          console.log("[SponsoredTx] Transaction receipt keys:", Object.keys(txReceipt));
 
           // Note: Privy's sendTransaction already waits for the transaction to be mined
           // so we don't need to wait again here
@@ -108,7 +122,30 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
           return result;
         }
       } catch (err) {
+        // Detailed error logging for debugging
         console.error("[SponsoredTx] Transaction failed:", err);
+        console.error("[SponsoredTx] Error type:", typeof err);
+        console.error("[SponsoredTx] Error constructor:", err?.constructor?.name);
+        console.error("[SponsoredTx] Error message:", err instanceof Error ? err.message : String(err));
+        console.error("[SponsoredTx] Error stack:", err instanceof Error ? err.stack : "No stack trace");
+
+        // Log error properties for Privy-specific errors
+        if (err && typeof err === "object") {
+          console.error("[SponsoredTx] Error properties:", Object.keys(err));
+          console.error("[SponsoredTx] Error details:", JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+
+          // Check for Privy-specific error fields
+          if ("code" in err) {
+            console.error("[SponsoredTx] Error code:", (err as { code: unknown }).code);
+          }
+          if ("reason" in err) {
+            console.error("[SponsoredTx] Error reason:", (err as { reason: unknown }).reason);
+          }
+          if ("data" in err) {
+            console.error("[SponsoredTx] Error data:", (err as { data: unknown }).data);
+          }
+        }
+
         const errorObj = err instanceof Error ? err : new Error(String(err));
         setError(errorObj);
         setIsPending(false);

@@ -413,8 +413,18 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
       }
 
       try {
+        console.log("[FHE] Starting publicDecrypt with handles:", handles);
+        console.log("[FHE] Number of handles:", handles.length);
+        console.log("[FHE] Instance available:", !!instance);
+        console.log("[FHE] Is supported:", isSupported);
+
         // Request public decryption through the relayer
         const result = await instance.publicDecrypt(handles);
+
+        console.log("[FHE] Decryption successful");
+        console.log("[FHE] Clear values:", result.clearValues);
+        console.log("[FHE] Decryption proof length:", result.decryptionProof?.length || 0);
+        console.log("[FHE] Decryption proof (first 100 chars):", result.decryptionProof?.slice(0, 100) || "N/A");
 
         return {
           clearValues: result.clearValues,
@@ -422,7 +432,13 @@ function FHEProviderInner({ children, privyWallets = [] }: { children: ReactNode
         };
       } catch (error) {
         // Log the full error for debugging
-        console.error("Public decrypt relayer error:", error);
+        console.error("[FHE] Public decrypt relayer error:", error);
+        console.error("[FHE] Error type:", typeof error);
+        console.error("[FHE] Error constructor:", error?.constructor?.name);
+        if (error && typeof error === "object") {
+          console.error("[FHE] Error properties:", Object.keys(error));
+          console.error("[FHE] Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+        }
 
         // Parse and re-throw as RelayerError with detailed information
         throw parseRelayerError(error);
