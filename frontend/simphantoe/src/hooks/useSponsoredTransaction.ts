@@ -9,7 +9,7 @@
  */
 import { useCallback, useState } from "react";
 import { encodeFunctionData, type Abi } from "viem";
-import { useWriteContract, usePublicClient } from "wagmi";
+import { useWriteContract } from "wagmi";
 import { useSendTransaction, useWallets } from "@privy-io/react-auth";
 import { isPrivyConfigured } from "../lib/privy";
 
@@ -38,7 +38,6 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
   // Privy's sendTransaction - automatically applies gas sponsorship
   const { sendTransaction } = useSendTransaction();
   const { wallets } = useWallets();
-  const publicClient = usePublicClient();
 
   // Fallback to wagmi's useWriteContract
   const wagmiWrite = useWriteContract();
@@ -58,6 +57,8 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
         if (hasPrivyEmbeddedWallet) {
           // Use Privy's sendTransaction for gas sponsorship
           console.log("[SponsoredTx] Using Privy sendTransaction for gas sponsorship");
+          console.log("[SponsoredTx] Function:", functionName);
+          console.log("[SponsoredTx] Args:", args);
 
           // Encode the contract call data
           const data = encodeFunctionData({
@@ -65,6 +66,8 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
             functionName,
             args: args as unknown[],
           });
+
+          console.log("[SponsoredTx] Encoded data length:", data.length);
 
           // Send via Privy's sendTransaction with gas sponsorship enabled
           const txReceipt = await sendTransaction(
@@ -84,10 +87,8 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
 
           console.log("[SponsoredTx] Transaction sent via Privy:", txHash);
 
-          // Wait for confirmation
-          if (publicClient) {
-            await publicClient.waitForTransactionReceipt({ hash: txHash });
-          }
+          // Note: Privy's sendTransaction already waits for the transaction to be mined
+          // so we don't need to wait again here
 
           setIsSuccess(true);
           setIsPending(false);
@@ -114,7 +115,7 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
         throw errorObj;
       }
     },
-    [hasPrivyEmbeddedWallet, sendTransaction, wagmiWrite, publicClient],
+    [hasPrivyEmbeddedWallet, sendTransaction, wagmiWrite],
   );
 
   return {

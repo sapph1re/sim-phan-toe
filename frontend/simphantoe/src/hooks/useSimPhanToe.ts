@@ -673,6 +673,11 @@ export function useGameFlow(gameId: bigint | undefined) {
   const needsFinalizeGameRef = useRef(false);
   const needsRevealBoardRef = useRef(false);
 
+  // Async locks to prevent concurrent execution of the same operation
+  const finalizeMoveInProgressRef = useRef(false);
+  const finalizeGameInProgressRef = useRef(false);
+  const revealBoardInProgressRef = useRef(false);
+
   // Track handles we've already processed to avoid using stale handles
   const processedHandlesRef = useRef<Set<string>>(new Set());
 
@@ -733,6 +738,9 @@ export function useGameFlow(gameId: bigint | undefined) {
       // Skip if not flagged for finalization
       if (!needsFinalizeMoveRef.current) return;
 
+      // Skip if already in progress (prevents race conditions with concurrent effect executions)
+      if (finalizeMoveInProgressRef.current) return;
+
       if (gameId === undefined || !gameState.playerAddress || !gameState.myMove) return;
       if (!gameState.myMoveSubmitted || gameState.myMoveMade) return;
 
@@ -740,7 +748,9 @@ export function useGameFlow(gameId: bigint | undefined) {
       if (!isInvalidHandle || isInvalidHandle === "0x0000000000000000000000000000000000000000000000000000000000000000")
         return;
 
+      // Set both flags atomically to prevent double execution
       needsFinalizeMoveRef.current = false;
+      finalizeMoveInProgressRef.current = true;
 
       try {
         setFheStatus({ type: "decrypt", message: "Validating move..." });
@@ -802,6 +812,9 @@ export function useGameFlow(gameId: bigint | undefined) {
           // Trigger re-run of the effect
           gameState.refetchMoves();
         });
+      } finally {
+        // Release the lock
+        finalizeMoveInProgressRef.current = false;
       }
     }
 
@@ -821,9 +834,13 @@ export function useGameFlow(gameId: bigint | undefined) {
       if (gameId === undefined) return;
       if (needsFinalizeGameRef.current) return;
 
+      // Skip if already in progress (prevents race conditions with concurrent effect executions)
+      if (finalizeGameInProgressRef.current) return;
+
       // Clear the pending flag immediately to prevent re-entry
       setMovesProcessedPending(false);
       needsFinalizeGameRef.current = true;
+      finalizeGameInProgressRef.current = true;
 
       try {
         // Refetch game state to ensure we have fresh handles
@@ -917,6 +934,9 @@ export function useGameFlow(gameId: bigint | undefined) {
           // Re-trigger by setting the pending flag
           setMovesProcessedPending(true);
         });
+      } finally {
+        // Release the lock
+        finalizeGameInProgressRef.current = false;
       }
     }
 
@@ -936,7 +956,11 @@ export function useGameFlow(gameId: bigint | undefined) {
         return;
       }
 
+      // Skip if already in progress (prevents race conditions with concurrent effect executions)
+      if (revealBoardInProgressRef.current) return;
+
       needsRevealBoardRef.current = false;
+      revealBoardInProgressRef.current = true;
 
       try {
         setFheStatus({ type: "decrypt", message: "Revealing board..." });
@@ -970,6 +994,9 @@ export function useGameFlow(gameId: bigint | undefined) {
         setPendingRetryAction(() => async () => {
           needsRevealBoardRef.current = true;
         });
+      } finally {
+        // Release the lock
+        revealBoardInProgressRef.current = false;
       }
     }
 
