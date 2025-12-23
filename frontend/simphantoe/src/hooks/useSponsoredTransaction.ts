@@ -66,12 +66,18 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
             args: args as unknown[],
           });
 
-          // Send via Privy's sendTransaction which applies gas sponsorship
-          const txReceipt = await sendTransaction({
-            to: address,
-            data,
-            chainId: 11155111, // Sepolia
-          });
+          // Send via Privy's sendTransaction with gas sponsorship enabled
+          const txReceipt = await sendTransaction(
+            {
+              to: address,
+              data,
+              chainId: 11155111, // Sepolia
+            },
+            {
+              // Enable gas sponsorship - Privy will pay gas fees from your credits
+              sponsor: true,
+            },
+          );
 
           // The receipt contains the transaction hash
           const txHash = txReceipt.hash as `0x${string}`;
