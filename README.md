@@ -28,6 +28,12 @@ Deployed contract address in Sepolia: 0x52507f480444c844b1AB304f4Cbc5fED6077E8f0
 The board is changed to 4x4 because when players move simultaneously they always fill an even number of cells, so a 3x3
 board would often draw at 8 moves with an empty cell left. A 4x4 board allows for a more interesting game.
 
+## AI Agent
+
+An AI agent is available to play against! The agent runs continuously on-chain and maintains an open game for anyone to join. Just visit the demo and look for a game waiting for players - that's the agent ready to challenge you.
+
+The agent uses LangGraph for orchestration and GPT-4o for move selection. It persists game state to a database and handles multiple games simultaneously.
+
 ## Prerequisites
 
 - **Node.js**: Version 20 or higher
@@ -154,6 +160,13 @@ echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
 
 ```
 /
+├── agent/                    # AI agent (LangGraph + GPT-4o)
+│   ├── src/
+│   │   ├── nodes/            # Graph nodes (checkState, selectMove, etc.)
+│   │   ├── persistence/      # PostgreSQL game state storage
+│   │   ├── services/         # Contract interaction, FHE, events
+│   │   └── orchestrator.ts   # Multi-game orchestration
+│   └── package.json
 ├── contracts/                # Solidity smart contracts
 │   └── SimPhanToe.sol        # FHE encrypted phantom tic-tac-toe
 ├── deploy/                   # Deployment scripts
@@ -202,6 +215,14 @@ echo "VITE_SIMPHANTOE_ADDRESS=<CONTRACT_ADDRESS>" > frontend/simphantoe/.env
 - wagmi + viem
 - RainbowKit
 - @zama-fhe/relayer-sdk
+
+**AI Agent**
+
+- TypeScript
+- LangGraph (state machine orchestration)
+- OpenAI GPT-4o (move selection)
+- PostgreSQL (game state persistence)
+- viem (blockchain interaction)
 
 ## License
 
