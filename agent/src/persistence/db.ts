@@ -94,16 +94,16 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   }
 }
 
-// Initialize the database schema
+// Initialize the database schema (idempotent - safe to run multiple times)
 export async function initializeDatabase(): Promise<void> {
-  logger.info("Initializing database schema...");
+  logger.info("Initializing database schema (idempotent)...");
 
   try {
     // Read the schema file
     const schemaPath = join(__dirname, "schema.sql");
     const schema = readFileSync(schemaPath, "utf-8");
 
-    // Execute the schema
+    // Execute the schema - all statements use IF NOT EXISTS/CREATE OR REPLACE
     await query(schema);
 
     logger.info("Database schema initialized successfully");

@@ -68,12 +68,12 @@ program
 
 program
   .command("db-init")
-  .description("Initialize the PostgreSQL database schema")
+  .description("Initialize the PostgreSQL database schema (idempotent - safe to run multiple times)")
   .action(async () => {
     try {
-      logger.info("Initializing database...");
+      logger.info("Running database initialization (idempotent)...");
       await initializeDatabase();
-      logger.info("Database initialized successfully!");
+      logger.info("Database schema is ready!");
       await closePool();
     } catch (error) {
       logger.error("Failed to initialize database", error);
