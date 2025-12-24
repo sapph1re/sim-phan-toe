@@ -75,6 +75,11 @@ function routeAfterWait(_state: AgentState): string {
 
 // Router after select move
 function routeAfterSelect(state: AgentState): string {
+  // If selectMove failed (e.g., no valid cells remaining), end the graph
+  if (state.currentPhase === GamePhase.Error) {
+    logger.error("SelectMove failed, ending graph", { error: state.lastError });
+    return END;
+  }
   if (state.pendingMove) {
     return "submitMove";
   }
@@ -159,7 +164,7 @@ export function buildGraph() {
     // Add edges from other nodes
     // waitForOpponent now goes to END to return control to orchestrator
     .addConditionalEdges("waitForOpponent", routeAfterWait, [END])
-    .addConditionalEdges("selectMove", routeAfterSelect, ["submitMove", "checkGameState"])
+    .addConditionalEdges("selectMove", routeAfterSelect, ["submitMove", "checkGameState", END])
     .addConditionalEdges("submitMove", routeAfterSubmit, ["finalizeMove", "checkGameState"])
     .addConditionalEdges("finalizeMove", routeAfterFinalizeMove, ["selectMove", "waitForOpponent", "checkGameState"])
     .addConditionalEdges("finalizeGameState", routeAfterFinalizeGameState, [
