@@ -271,6 +271,34 @@ export class GameOrchestrator {
         recursionLimit: 25,
       });
 
+      // Handle terminal error states - mark game as errored so we stop processing it
+      if (newState.currentPhase === GamePhase.Error) {
+        logger.warn("Game entered error state, marking as errored", {
+          gameId: game.game_id.toString(),
+          error: newState.lastError,
+        });
+        await gameStore.updateGame(gameKey, {
+          status: "errored",
+          currentPhase: GamePhase.Error,
+          lastError: typeof newState.lastError === "string" ? newState.lastError : JSON.stringify(newState.lastError),
+        });
+        return;
+      }
+
+      // Handle game completion
+      if (newState.currentPhase === GamePhase.GameComplete) {
+        logger.info("Game completed", {
+          gameId: game.game_id.toString(),
+          winner: newState.winner,
+        });
+        await gameStore.updateGame(gameKey, {
+          status: "completed",
+          currentPhase: GamePhase.GameComplete,
+          winner: newState.winner,
+        });
+        return;
+      }
+
       // Calculate next check time based on phase
       const nextCheckAt = this.calculateNextCheckTime(newState);
 

@@ -131,7 +131,7 @@ export async function updateGame(
     currentPhase: string;
     currentRound: number;
     winner: number;
-    status: "active" | "completed" | "abandoned";
+    status: "active" | "completed" | "abandoned" | "errored";
     waitingSince: Date | null;
     lastOpponentActivity: Date | null;
     lastCheckAt: Date | null;
