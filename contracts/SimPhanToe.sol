@@ -123,12 +123,11 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @notice Join a game as player 2
     /// @param _gameId The ID of the game to join
     function joinGame(uint256 _gameId) external {
-        Game memory game = games[_gameId];
+        Game storage game = games[_gameId];
         require(game.player1 != address(0), "Game not found.");
         require(game.player2 == address(0), "Game is already full.");
         require(msg.sender != game.player1, "Cannot join your own game.");
         game.player2 = msg.sender;
-        games[_gameId] = game;
         emit PlayerJoined(_gameId, msg.sender);
     }
 
@@ -193,7 +192,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @dev Must be called after submitting a move and decrypting the isInvalid flag
     function finalizeMove(uint256 _gameId, address _player, bool _isInvalid, bytes memory _decryptionProof) external {
         // verify decryption of the move.isInvalid flag
-        Move memory move = nextMoves[_gameId][_player];
+        Move storage move = nextMoves[_gameId][_player];
         bytes32[] memory ciphertextHandles = new bytes32[](1);
         ciphertextHandles[0] = FHE.toBytes32(move.isInvalid);
         bytes memory abiEncodedCleartexts = abi.encode(_isInvalid);
@@ -208,10 +207,10 @@ contract SimPhanToe is ZamaEthereumConfig {
             move.isMade = true;
             emit MoveMade(_gameId, _player);
         }
-        nextMoves[_gameId][_player] = move;
         // process the moves if both players have made their moves
-        Game memory game = games[_gameId];
-        if (nextMoves[_gameId][game.player1].isMade && nextMoves[_gameId][game.player2].isMade) {
+        address player1 = games[_gameId].player1;
+        address player2 = games[_gameId].player2;
+        if (nextMoves[_gameId][player1].isMade && nextMoves[_gameId][player2].isMade) {
             processMoves(_gameId);
         }
     }
@@ -228,7 +227,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         bool _collision,
         bytes memory _decryptionProof
     ) external {
-        Game memory game = games[_gameId];
+        Game storage game = games[_gameId];
         require(game.winner == Winner.None, "Game already finished.");
         // verify decryption of the winner value and the collision flag
         bytes32[] memory ciphertextHandles = new bytes32[](2);
@@ -240,7 +239,6 @@ contract SimPhanToe is ZamaEthereumConfig {
         if (_collision) {
             game.eCollision = FHE.asEbool(false);
             FHE.allowThis(game.eCollision);
-            games[_gameId] = game;
             emit Collision(_gameId);
             return;
             // clients should reflect the collision in the UI and ask the players to submit another move
@@ -248,7 +246,6 @@ contract SimPhanToe is ZamaEthereumConfig {
         // finish the game if we have a winner
         if (_winner != uint8(Winner.None)) {
             game.winner = Winner(_winner);
-            games[_gameId] = game;
             // decrypt the board
             for (uint8 i = 0; i < 4; i++) {
                 for (uint8 j = 0; j < 4; j++) {
@@ -267,7 +264,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @param _decryptionProof KMS signature proving correct decryption
     /// @dev Must be called after finalizeGameState() if the game has finished
     function revealBoard(uint256 _gameId, uint8[4][4] memory _board, bytes memory _decryptionProof) external {
-        Game memory game = games[_gameId];
+        Game storage game = games[_gameId];
         require(game.winner != Winner.None, "Game is not finished.");
         // verify decryption of the board
         bytes32[] memory ciphertextHandles = new bytes32[](16);
@@ -283,7 +280,6 @@ contract SimPhanToe is ZamaEthereumConfig {
                 game.board[i][j] = Cell(_board[i][j]);
             }
         }
-        games[_gameId] = game;
         emit BoardRevealed(_gameId);
     }
 
@@ -385,9 +381,15 @@ contract SimPhanToe is ZamaEthereumConfig {
 
     /// @notice Write to a cell in the board in FHE
     function setCell(euint8[4][4] storage _board, euint8 _x, euint8 _y, euint8 _cell) private {
+        // Precompute coordinate comparisons to reduce FHE operations from 64 to 40
+        ebool[4] memory xMatches;
+        for (uint8 j = 0; j < 4; j++) {
+            xMatches[j] = FHE.eq(_x, j);
+        }
         for (uint8 i = 0; i < 4; i++) {
+            ebool yMatch = FHE.eq(_y, i);
             for (uint8 j = 0; j < 4; j++) {
-                _board[i][j] = FHE.select(FHE.and(FHE.eq(_y, i), FHE.eq(_x, j)), _cell, _board[i][j]);
+                _board[i][j] = FHE.select(FHE.and(yMatch, xMatches[j]), _cell, _board[i][j]);
                 FHE.allowThis(_board[i][j]);
             }
         }
@@ -395,9 +397,15 @@ contract SimPhanToe is ZamaEthereumConfig {
 
     /// @notice Read a cell in the board in FHE
     function getCell(euint8[4][4] memory _board, euint8 _x, euint8 _y) private returns (euint8 cell) {
+        // Precompute coordinate comparisons to reduce FHE operations from 64 to 40
+        ebool[4] memory xMatches;
+        for (uint8 j = 0; j < 4; j++) {
+            xMatches[j] = FHE.eq(_x, j);
+        }
         for (uint8 i = 0; i < 4; i++) {
+            ebool yMatch = FHE.eq(_y, i);
             for (uint8 j = 0; j < 4; j++) {
-                cell = FHE.select(FHE.and(FHE.eq(_y, i), FHE.eq(_x, j)), _board[i][j], cell);
+                cell = FHE.select(FHE.and(yMatch, xMatches[j]), _board[i][j], cell);
             }
         }
         return cell;
@@ -551,8 +559,8 @@ contract SimPhanToe is ZamaEthereumConfig {
         isFull = FHE.asEbool(true);
         for (uint8 i = 0; i < 4; i++) {
             for (uint8 j = 0; j < 4; j++) {
-                // if any cell is empty then the board is not full
-                isFull = FHE.select(FHE.eq(_board[i][j], CELL_EMPTY), FHE.asEbool(false), isFull);
+                // board is full only if all cells are non-empty
+                isFull = FHE.and(isFull, FHE.ne(_board[i][j], CELL_EMPTY));
             }
         }
         return isFull;
