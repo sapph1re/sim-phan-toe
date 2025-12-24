@@ -30,9 +30,11 @@ board would often draw at 8 moves with an empty cell left. A 4x4 board allows fo
 
 ## AI Agent
 
-An AI agent is available to play against! The agent runs continuously on-chain and maintains an open game for anyone to join. Just visit the demo and look for a game waiting for players - that's the agent ready to challenge you.
+An AI agent is available to play against! The agent runs continuously on-chain and maintains an open game for anyone to
+join. Just visit the demo and look for a game waiting for players - that's the agent ready to challenge you.
 
-The agent uses LangGraph for orchestration and GPT-4o for move selection. It persists game state to a database and handles multiple games simultaneously.
+The agent uses LangGraph for orchestration and GPT-4o for move selection. It persists game state to a database and
+handles multiple games simultaneously.
 
 ## Prerequisites
 
