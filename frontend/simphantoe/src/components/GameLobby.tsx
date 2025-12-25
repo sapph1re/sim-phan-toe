@@ -12,7 +12,7 @@ import {
   useUserBalance,
   MIN_GAS_RESERVE
 } from '../hooks/useSimPhanToe'
-import { Winner, isGameFinished, isGameCancelled } from '../lib/contracts'
+import { Winner, isGameFinished, isGameCancelled, isAgentAddress } from '../lib/contracts'
 
 // Timeout options in seconds
 const TIMEOUT_OPTIONS = [
@@ -425,6 +425,10 @@ function PlayerGameCard({
   const isCancelled = isGameCancelled(game)
   const isPlayer1 = playerAddress === game.player1
   const hasStake = game.stake > 0n
+  
+  // Check if opponent is the agent
+  const opponentAddress = isPlayer1 ? game.player2 : game.player1
+  const opponentIsAgent = isAgentAddress(opponentAddress)
 
   // Determine win/loss status for finished games
   let gameResult: 'won' | 'lost' | 'draw' | 'cancelled' | null = null
@@ -501,7 +505,14 @@ function PlayerGameCard({
           )}
         </div>
         <div>
-          <p className="font-semibold">Phantom Game #{gameId.toString()}</p>
+          <p className="font-semibold flex items-center gap-2">
+            Phantom Game #{gameId.toString()}
+            {opponentIsAgent && !isWaiting && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-cyber-blue/20 text-cyber-blue font-normal">
+                🤖 vs Agent
+              </span>
+            )}
+          </p>
           <p className={`text-sm ${statusColor}`}>{status}</p>
           {/* Show stake and timeout badges */}
           <div className="flex items-center gap-2 mt-1">
@@ -556,6 +567,7 @@ function OpenGameCard({
 
   const shortenAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
   const hasStake = game.stake > 0n
+  const creatorIsAgent = isAgentAddress(game.player1)
   
   // Calculate if user can afford to join
   const requiredAmount = game.stake + MIN_GAS_RESERVE
@@ -573,8 +585,12 @@ function OpenGameCard({
     <div className="glass-darker p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyber-cyan/20 to-cyber-blue/20 flex items-center justify-center font-display font-bold text-cyber-cyan relative">
-            #{gameId.toString()}
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-display font-bold relative ${
+            creatorIsAgent 
+              ? 'bg-gradient-to-br from-cyber-blue/20 to-indigo-500/20 text-cyber-blue' 
+              : 'bg-gradient-to-br from-cyber-cyan/20 to-cyber-blue/20 text-cyber-cyan'
+          }`}>
+            {creatorIsAgent ? '🤖' : `#${gameId.toString()}`}
             <div className="absolute -top-1 -right-1">
               <svg className="w-4 h-4 text-cyber-cyan/50 lock-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -583,9 +599,16 @@ function OpenGameCard({
             </div>
           </div>
           <div>
-            <p className="font-semibold">Phantom Game #{gameId.toString()}</p>
+            <p className="font-semibold flex items-center gap-2">
+              Phantom Game #{gameId.toString()}
+              {creatorIsAgent && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-cyber-blue/20 text-cyber-blue font-normal">
+                  🤖 Agent
+                </span>
+              )}
+            </p>
             <p className="text-sm text-gray-500">
-              Created by {shortenAddress(game.player1)}
+              Created by {creatorIsAgent ? 'Agent' : shortenAddress(game.player1)}
             </p>
           </div>
         </div>

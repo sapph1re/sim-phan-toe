@@ -5,7 +5,7 @@ import { GameBoard } from "./GameBoard";
 import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
 import { FHEStatus } from "./FHEStatus";
 import { useGameFlow, useStartGame, useCancelGame, useClaimTimeout } from "../hooks/useSimPhanToe";
-import { Winner, isGameFinished, isGameCancelled } from "../lib/contracts";
+import { Winner, isGameFinished, isGameCancelled, isAgentAddress } from "../lib/contracts";
 
 interface GameViewProps {
   gameId: bigint;
@@ -714,13 +714,18 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                   ✕
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
                     Player 1 {isPlayer1 && "(You)"}
+                    {isAgentAddress(game.player1) && (
+                      <span className="px-1.5 py-0.5 rounded bg-cyber-blue/20 text-cyber-blue">🤖 Agent</span>
+                    )}
                     {isGameOver && game.winner === Winner.Player1 && (
-                      <span className="ml-2 text-green-500">Winner!</span>
+                      <span className="ml-1 text-green-500">Winner!</span>
                     )}
                   </p>
-                  <p className="font-mono text-sm truncate">{game.player1}</p>
+                  <p className="font-mono text-sm truncate">
+                    {isAgentAddress(game.player1) ? "Agent" : game.player1}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -749,13 +754,18 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                     ))}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
                     Player 2 {!isPlayer1 && isPlayer && "(You)"}
+                    {!waitingForOpponent && isAgentAddress(game.player2) && (
+                      <span className="px-1.5 py-0.5 rounded bg-cyber-blue/20 text-cyber-blue">🤖 Agent</span>
+                    )}
                     {isGameOver && game.winner === Winner.Player2 && (
-                      <span className="ml-2 text-green-500">Winner!</span>
+                      <span className="ml-1 text-green-500">Winner!</span>
                     )}
                   </p>
-                  <p className="font-mono text-sm truncate">{waitingForOpponent ? "Waiting..." : game.player2}</p>
+                  <p className="font-mono text-sm truncate">
+                    {waitingForOpponent ? "Waiting..." : isAgentAddress(game.player2) ? "Agent" : game.player2}
+                  </p>
                 </div>
               </div>
             </div>

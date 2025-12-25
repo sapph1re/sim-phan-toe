@@ -393,3 +393,14 @@ export function isBoardRevealed(game: Game | undefined): boolean {
   }
   return false;
 }
+
+// Agent address - configurable via environment variable
+export const AGENT_ADDRESS = (
+  import.meta.env.VITE_AGENT_ADDRESS || "0x261815C822A1e270e58E1902B66f457ff2baa3b6"
+).toLowerCase() as `0x${string}`;
+
+// Helper to check if an address is the agent
+export function isAgentAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  return address.toLowerCase() === AGENT_ADDRESS;
+}
