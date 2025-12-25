@@ -12,6 +12,13 @@ This agent uses:
 - **Zama FHE SDK** - Encryption/decryption for the phantom game mechanics
 - **viem** - Ethereum contract interactions
 
+### Key Features
+
+- **Multi-game orchestration** - Manages multiple games simultaneously in round-robin fashion
+- **Automatic timeout claims** - Detects and claims victory when opponents time out
+- **Persistent state** - SQLite database tracks game state across restarts
+- **Event-driven** - WebSocket subscriptions with polling fallback for real-time updates
+
 ## Prerequisites
 
 - Node.js v20+ (v22+ recommended for FHE SDK)
@@ -121,10 +128,18 @@ src/
 3. **SelectingMove** → GPT-4 chooses optimal cell
 4. **SubmittingMove** → Encrypt and submit move
 5. **FinalizingMove** → Decrypt validity, finalize on-chain
-6. **WaitingForOpponentMove** → Polling for opponent
+6. **WaitingForOpponentMove** → Polling for opponent (monitors timeout)
 7. **FinalizingGameState** → Decrypt winner/collision
 8. **RevealingBoard** → Decrypt and reveal final board (if game over)
 9. **GameComplete** → Display results
+
+### Timeout Handling
+
+The agent automatically monitors move timeouts:
+
+- When waiting for opponent's move, checks if timeout has elapsed
+- Claims victory automatically if opponent times out
+- Games default to 24-hour move timeout
 
 ## Strategy
 
@@ -134,6 +149,15 @@ The agent uses GPT-4 to make strategic decisions:
 - Considers center and corner positions
 - Avoids predictable patterns to reduce collisions
 - Adapts strategy based on collision history
+
+### Staking Behavior
+
+The agent currently:
+
+- Creates games with **no stake** (free games)
+- Uses **24-hour move timeout** for created games
+- Does **not** join games that require stakes
+- Claims timeout victories automatically when opponents are inactive
 
 ## Development
 

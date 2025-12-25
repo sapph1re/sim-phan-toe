@@ -152,7 +152,7 @@ program
       logger.info("Creating new game...");
 
       const contract = getContractService();
-      const { gameId } = await contract.startGame();
+      const { gameId } = await contract.startGame(86400n); // 24 hour timeout
 
       logger.info(`Game created with ID: ${gameId}`);
       logger.info("Waiting for an opponent to join...");
@@ -334,7 +334,7 @@ program
         await playGame(activeGameId);
       } else {
         logger.info("No active games found. Creating a new game...");
-        const { gameId } = await contract.startGame();
+        const { gameId } = await contract.startGame(86400n); // 24 hour timeout
         logger.info(`Game created with ID: ${gameId}`);
         logger.info("Waiting for an opponent to join...");
         await playGame(gameId);

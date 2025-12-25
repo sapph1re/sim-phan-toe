@@ -80,6 +80,17 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
     if (game.winner !== Winner.None) {
       logger.info("Game is finished", { winner: game.winner });
 
+      // Cancelled games don't have a board to reveal
+      if (game.winner === Winner.Cancelled) {
+        return {
+          ...baseUpdate,
+          currentPhase: GamePhase.GameComplete,
+          winner: Winner.Cancelled,
+          shouldContinue: false,
+          waitingSince: null,
+        };
+      }
+
       // Check if board is already revealed (any non-zero cell)
       const boardRevealed = game.board.some((row) => row.some((cell) => cell !== 0));
 
@@ -135,9 +146,43 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
       };
     }
 
-    // 5. Our move is made, waiting for opponent
+    // 5. Our move is made, waiting for opponent - check for timeout
     if (myMove.isMade && !opponentMove.isMade) {
-      logger.info("Waiting for opponent's move");
+      // Check if opponent has timed out
+      const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
+      const timeoutDeadline = game.lastActionTimestamp + game.moveTimeout;
+
+      if (currentTimestamp >= timeoutDeadline) {
+        logger.info("Opponent has timed out! Claiming victory...", {
+          lastAction: game.lastActionTimestamp.toString(),
+          timeout: game.moveTimeout.toString(),
+          deadline: timeoutDeadline.toString(),
+          now: currentTimestamp.toString(),
+        });
+
+        // Claim the timeout victory
+        try {
+          await contract.claimTimeout(gameId);
+          logger.info("Timeout claimed successfully");
+
+          // Re-fetch game to get updated winner
+          const updatedGame = await contract.getGame(gameId);
+          return {
+            ...baseUpdate,
+            game: updatedGame,
+            currentPhase: GamePhase.RevealingBoard,
+            winner: updatedGame.winner as Winner,
+            waitingSince: null,
+          };
+        } catch (error) {
+          logger.error("Failed to claim timeout", error);
+          // Continue waiting - might be a transient error
+        }
+      }
+
+      logger.info("Waiting for opponent's move", {
+        timeRemaining: Number(timeoutDeadline - currentTimestamp),
+      });
       return {
         ...baseUpdate,
         currentPhase: GamePhase.WaitingForOpponentMove,

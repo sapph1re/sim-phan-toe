@@ -38,6 +38,14 @@ Virtual Machine).
   - If both complete a line simultaneously, it's a Draw
   - If board fills with no winner, it's a Draw
 
+### Staking & Timeouts
+
+- **Optional Stakes**: Player1 can set an ETH stake when creating a game. Player2 must match it to join.
+- **Move Timeout**: Each game has a configurable timeout (1 hour to 7 days). If a player doesn't complete their move in
+  time, the opponent can claim victory.
+- **Prize Distribution**: Winner takes the entire pot (2x stake). Draws split evenly.
+- **Game Cancellation**: Player1 can cancel an unjoined game to get their stake refunded.
+
 ### Network
 
 - **Supported Network**: Sepolia Testnet only (Chain ID: 11155111)
@@ -109,7 +117,8 @@ enum Winner {
     None = 0,      // Game in progress
     Player1 = 1,   // Player 1 won
     Player2 = 2,   // Player 2 won
-    Draw = 3       // Draw (both win simultaneously or board full)
+    Draw = 3,      // Draw (both win simultaneously or board full)
+    Cancelled = 4  // Game cancelled before player2 joined (plaintext only)
 }
 ```
 
@@ -125,6 +134,9 @@ struct Game {
   ebool eCollision; // Encrypted collision flag (bytes32 handle)
   Cell[4][4] board; // Cleartext board (only populated after game ends + reveal)
   Winner winner; // Cleartext winner (set when game ends)
+  uint256 stake; // ETH stake per player (in wei)
+  uint256 moveTimeout; // Time limit for moves (in seconds)
+  uint256 lastActionTimestamp; // Timestamp of last game action
 }
 ```
 
@@ -280,7 +292,10 @@ const game = await contract.getGame(gameId);
 //   eWinner: bytes32 (encrypted handle),
 //   eCollision: bytes32 (encrypted handle),
 //   board: uint8[4][4] (cleartext, populated after reveal),
-//   winner: uint8 (0=None, 1=Player1, 2=Player2, 3=Draw)
+//   winner: uint8 (0=None, 1=Player1, 2=Player2, 3=Draw, 4=Cancelled),
+//   stake: bigint (wei per player),
+//   moveTimeout: bigint (seconds),
+//   lastActionTimestamp: bigint (unix timestamp)
 // }
 ```
 
@@ -319,16 +334,22 @@ const canSubmit = await contract.canSubmitMove(gameId, playerAddress);
 #### Prerequisites
 
 - Wallet connected on Sepolia
-- Have ETH for gas
+- Have ETH for gas (plus stake if desired)
 
 #### Steps
 
-1. **Call `startGame()`**
+1. **Call `startGame(moveTimeout)` with optional stake**
 
 ```typescript
-// Function: startGame()
-// Emits: GameStarted(gameId, player1)
-const tx = await contract.startGame();
+// Function: startGame(uint256 _moveTimeout) payable
+// _moveTimeout: Time limit for each move (MIN: 1 hour, MAX: 7 days)
+// msg.value: Optional stake amount (opponent must match to join)
+// Emits: GameStarted(gameId, player1, stake, moveTimeout)
+
+const moveTimeout = 86400n; // 24 hours in seconds
+const stake = parseEther("0.01"); // Optional: 0.01 ETH stake
+
+const tx = await contract.startGame(moveTimeout, { value: stake });
 await tx.wait();
 ```
 
@@ -353,24 +374,84 @@ const gameId = event.args.gameId;
 
 - Open game exists
 - You are not player1 of that game
+- You have enough ETH to match the stake (if any)
 
 #### Steps
 
-1. **Find open games**
+1. **Find open games and check stake**
 
 ```typescript
 const openGames = await contract.getOpenGames();
 const gameIdToJoin = openGames[0]; // Pick one
+
+// Check the required stake
+const game = await contract.getGame(gameIdToJoin);
+const requiredStake = game.stake; // Must send exactly this amount
 ```
 
-2. **Join the game**
+2. **Join the game with matching stake**
 
 ```typescript
-// Function: joinGame(uint256 _gameId)
+// Function: joinGame(uint256 _gameId) payable
+// msg.value: Must exactly match game.stake
 // Emits: PlayerJoined(gameId, player2)
-// Reverts if: game not found, already full, or you're player1
-const tx = await contract.joinGame(gameIdToJoin);
+// Reverts if: game not found, already full, you're player1, or stake doesn't match
+const tx = await contract.joinGame(gameIdToJoin, { value: requiredStake });
 await tx.wait();
+```
+
+---
+
+### Cancelling a Game
+
+Player1 can cancel an unjoined game to get their stake refunded.
+
+#### Prerequisites
+
+- You are player1 of the game
+- No player2 has joined yet
+- Game is not already finished/cancelled
+
+#### Steps
+
+```typescript
+// Function: cancelGame(uint256 _gameId)
+// Emits: GameCancelled(gameId)
+// Refunds stake to player1
+const tx = await contract.cancelGame(gameId);
+await tx.wait();
+// Game is now marked as Winner.Cancelled
+```
+
+---
+
+### Claiming Timeout Victory
+
+If opponent hasn't made their move within the timeout period, you can claim victory.
+
+#### Prerequisites
+
+- Game has both players
+- Game is not finished
+- `block.timestamp >= lastActionTimestamp + moveTimeout`
+- You have made your move (or opponent timed out on their turn)
+
+#### Steps
+
+```typescript
+// Function: claimTimeout(uint256 _gameId)
+// Emits: GameTimeout(gameId, winner)
+// Distributes prize to winner (or splits on draw if both timed out)
+
+// Check if timeout has elapsed
+const game = await contract.getGame(gameId);
+const now = BigInt(Math.floor(Date.now() / 1000));
+const deadline = game.lastActionTimestamp + game.moveTimeout;
+
+if (now >= deadline) {
+  const tx = await contract.claimTimeout(gameId);
+  await tx.wait();
+}
 ```
 
 ---
@@ -633,17 +714,19 @@ const result = await fheInstance.publicDecrypt(handles);
 
 ## Events Reference
 
-| Event            | Arguments                               | When Emitted                                     |
-| ---------------- | --------------------------------------- | ------------------------------------------------ |
-| `GameStarted`    | `gameId` (indexed), `player1` (indexed) | New game created                                 |
-| `PlayerJoined`   | `gameId` (indexed), `player2` (indexed) | Player 2 joins                                   |
-| `MoveSubmitted`  | `gameId` (indexed), `player` (indexed)  | Move encrypted and submitted                     |
-| `MoveInvalid`    | `gameId` (indexed), `player` (indexed)  | Move validation failed (resubmit needed)         |
-| `MoveMade`       | `gameId` (indexed), `player` (indexed)  | Move validated successfully                      |
-| `MovesProcessed` | `gameId` (indexed)                      | Both moves processed, ready for round resolution |
-| `Collision`      | `gameId` (indexed)                      | Both players chose same cell                     |
-| `GameUpdated`    | `gameId` (indexed), `winner`            | Round resolved (winner may still be None)        |
-| `BoardRevealed`  | `gameId` (indexed)                      | Board decrypted and stored                       |
+| Event            | Arguments                                                       | When Emitted                                     |
+| ---------------- | --------------------------------------------------------------- | ------------------------------------------------ |
+| `GameStarted`    | `gameId` (indexed), `player1` (indexed), `stake`, `moveTimeout` | New game created                                 |
+| `PlayerJoined`   | `gameId` (indexed), `player2` (indexed)                         | Player 2 joins                                   |
+| `MoveSubmitted`  | `gameId` (indexed), `player` (indexed)                          | Move encrypted and submitted                     |
+| `MoveInvalid`    | `gameId` (indexed), `player` (indexed)                          | Move validation failed (resubmit needed)         |
+| `MoveMade`       | `gameId` (indexed), `player` (indexed)                          | Move validated successfully                      |
+| `MovesProcessed` | `gameId` (indexed)                                              | Both moves processed, ready for round resolution |
+| `Collision`      | `gameId` (indexed)                                              | Both players chose same cell                     |
+| `GameUpdated`    | `gameId` (indexed), `winner`                                    | Round resolved (winner may still be None)        |
+| `BoardRevealed`  | `gameId` (indexed)                                              | Board decrypted and stored                       |
+| `GameCancelled`  | `gameId` (indexed)                                              | Game cancelled by player1 before player2 joined  |
+| `GameTimeout`    | `gameId` (indexed), `winner` (indexed)                          | Timeout claimed, game ended                      |
 
 ### Event Listening Example
 
@@ -672,17 +755,23 @@ const unwatch = publicClient.watchContractEvent({
 
 ### Contract Revert Messages
 
-| Error Message                          | Cause                                              |
-| -------------------------------------- | -------------------------------------------------- |
-| `"Game not found."`                    | Invalid game ID                                    |
-| `"Game is already full."`              | Trying to join a game that has 2 players           |
-| `"Cannot join your own game."`         | Player1 trying to join their own game              |
-| `"Game has not started yet."`          | Trying to submit move before player2 joins         |
-| `"Game is finished."`                  | Trying to play in a finished game                  |
-| `"You are not a player in this game."` | Non-participant trying to submit move              |
-| `"Move already submitted."`            | Trying to submit when already submitted this round |
-| `"Game is not finished."`              | Trying to reveal board before game ends            |
-| `"Game already finished."`             | Trying to finalize game state twice                |
+| Error Message                          | Cause                                               |
+| -------------------------------------- | --------------------------------------------------- |
+| `"Game not found."`                    | Invalid game ID                                     |
+| `"Game is already full."`              | Trying to join a game that has 2 players            |
+| `"Cannot join your own game."`         | Player1 trying to join their own game               |
+| `"Must match stake."`                  | Joining with wrong ETH amount                       |
+| `"Invalid timeout."`                   | Timeout outside MIN_TIMEOUT (1h) / MAX_TIMEOUT (7d) |
+| `"Game has not started yet."`          | Trying to submit move before player2 joins          |
+| `"Game is finished."`                  | Trying to play in a finished game                   |
+| `"You are not a player in this game."` | Non-participant trying to submit move               |
+| `"Move already submitted."`            | Trying to submit when already submitted this round  |
+| `"Game is not finished."`              | Trying to reveal board before game ends             |
+| `"Game already finished."`             | Trying to finalize game state twice                 |
+| `"Only player1 can cancel."`           | Non-player1 trying to cancel                        |
+| `"Game already has player2."`          | Trying to cancel after opponent joined              |
+| `"Timeout not reached."`               | Trying to claim timeout before deadline             |
+| `"Game not started or full."`          | Trying to claim timeout on invalid game             |
 
 ### FHE/Relayer Errors
 

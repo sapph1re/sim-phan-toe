@@ -22,6 +22,7 @@ export enum Winner {
   Player1 = 1,
   Player2 = 2,
   Draw = 3,
+  Cancelled = 4,
 }
 
 // Cell enum matching the contract
@@ -58,6 +59,9 @@ export interface GameData {
   eCollision: `0x${string}`;
   board: readonly (readonly number[])[];
   winner: number;
+  stake: bigint;
+  moveTimeout: bigint;
+  lastActionTimestamp: bigint;
 }
 
 // Agent state annotation for LangGraph

@@ -18,6 +18,7 @@ const CHAIN_ID = 11155111;
 // Timing constants
 const MAIN_LOOP_DELAY_MS = 1000; // Delay between orchestration cycles
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+const DEFAULT_MOVE_TIMEOUT = 86400n; // 24 hours in seconds
 
 // Balance thresholds
 const LOW_BALANCE_WEI = 50_000_000_000_000_000n; // 0.05 ETH - warning threshold
@@ -204,7 +205,8 @@ export class GameOrchestrator {
 
       try {
         const contract = getContractService();
-        const { gameId, txHash } = await contract.startGame();
+        // Create game with default timeout (24 hours), no stake
+        const { gameId, txHash } = await contract.startGame(DEFAULT_MOVE_TIMEOUT);
 
         // Create game record in DB
         const gameKey = createGameKey(CHAIN_ID, this.contractAddress, gameId);
@@ -216,7 +218,11 @@ export class GameOrchestrator {
           nextCheckAt: new Date(Date.now() + 20_000), // Check in 20s
         });
 
-        logger.info("Created open game", { gameId: gameId.toString(), txHash });
+        logger.info("Created open game", {
+          gameId: gameId.toString(),
+          txHash,
+          timeout: DEFAULT_MOVE_TIMEOUT.toString(),
+        });
       } catch (error) {
         logger.error("Failed to create open game", error);
         // Don't throw - we'll try again next cycle
@@ -400,6 +406,12 @@ export class GameOrchestrator {
       updates.waitingSince = null;
     }
 
+    // Handle game-ending events
+    if (["GameCancelled", "GameTimeout"].includes(eventName)) {
+      updates.status = "completed";
+      updates.currentPhase = GamePhase.GameComplete;
+    }
+
     await gameStore.updateGame(gameKey, updates);
 
     logger.debug("Game updated from event", {
@@ -433,10 +445,13 @@ export class GameOrchestrator {
       const gameData = await contract.getGame(gameId);
       const isPlayer1 = gameData.player1.toLowerCase() === this.playerAddress.toLowerCase();
 
-      // Determine initial phase
+      // Determine initial phase and status
       let currentPhase: GamePhase;
+      let status: "active" | "completed" | "abandoned" | "errored" = "active";
+
       if (gameData.winner !== Winner.None) {
         currentPhase = GamePhase.GameComplete;
+        status = "completed";
       } else if (gameData.player2 === "0x0000000000000000000000000000000000000000") {
         currentPhase = GamePhase.WaitingForOpponent;
       } else {
@@ -448,7 +463,7 @@ export class GameOrchestrator {
         playerAddress: this.playerAddress,
         isPlayer1,
         currentPhase,
-        status: gameData.winner !== Winner.None ? "completed" : "active",
+        status,
         nextCheckAt: new Date(), // Check immediately
       });
 

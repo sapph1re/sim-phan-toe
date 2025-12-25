@@ -28,6 +28,8 @@ export const SIMPHANTOE_ABI = [
     inputs: [
       { name: "gameId", type: "uint256", indexed: true },
       { name: "player1", type: "address", indexed: true },
+      { name: "stake", type: "uint256", indexed: false },
+      { name: "moveTimeout", type: "uint256", indexed: false },
     ],
   },
   {
@@ -85,6 +87,19 @@ export const SIMPHANTOE_ABI = [
     name: "BoardRevealed",
     inputs: [{ name: "gameId", type: "uint256", indexed: true }],
   },
+  {
+    type: "event",
+    name: "GameCancelled",
+    inputs: [{ name: "gameId", type: "uint256", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "GameTimeout",
+    inputs: [
+      { name: "gameId", type: "uint256", indexed: true },
+      { name: "winner", type: "address", indexed: true },
+    ],
+  },
   // Read functions
   {
     type: "function",
@@ -110,6 +125,9 @@ export const SIMPHANTOE_ABI = [
           { name: "eCollision", type: "bytes32" },
           { name: "board", type: "uint8[4][4]" },
           { name: "winner", type: "uint8" },
+          { name: "stake", type: "uint256" },
+          { name: "moveTimeout", type: "uint256" },
+          { name: "lastActionTimestamp", type: "uint256" },
         ],
       },
     ],
@@ -175,13 +193,27 @@ export const SIMPHANTOE_ABI = [
   {
     type: "function",
     name: "startGame",
-    inputs: [],
+    inputs: [{ name: "_moveTimeout", type: "uint256" }],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "joinGame",
+    inputs: [{ name: "_gameId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "cancelGame",
+    inputs: [{ name: "_gameId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",
   },
   {
     type: "function",
-    name: "joinGame",
+    name: "claimTimeout",
     inputs: [{ name: "_gameId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",
@@ -333,6 +365,9 @@ export class ContractService {
       eCollision: game.eCollision,
       board: game.board,
       winner: game.winner,
+      stake: game.stake,
+      moveTimeout: game.moveTimeout,
+      lastActionTimestamp: game.lastActionTimestamp,
     };
   }
 
@@ -364,8 +399,8 @@ export class ContractService {
   }
 
   // Write functions
-  async startGame(): Promise<{ txHash: `0x${string}`; gameId: bigint }> {
-    logger.info("Starting new game...");
+  async startGame(moveTimeout: bigint, stake?: bigint): Promise<{ txHash: `0x${string}`; gameId: bigint }> {
+    logger.info("Starting new game...", { moveTimeout: moveTimeout.toString(), stake: stake?.toString() || "0" });
 
     const txHash = await this.walletClient.writeContract({
       account: this.account,
@@ -373,6 +408,8 @@ export class ContractService {
       address: this.contractAddress,
       abi: SIMPHANTOE_ABI,
       functionName: "startGame",
+      args: [moveTimeout],
+      value: stake ?? 0n,
     });
 
     logger.debug("Transaction submitted", { txHash });
@@ -400,6 +437,8 @@ export class ContractService {
           inputs: [
             { name: "gameId", type: "uint256", indexed: true },
             { name: "player1", type: "address", indexed: true },
+            { name: "stake", type: "uint256", indexed: false },
+            { name: "moveTimeout", type: "uint256", indexed: false },
           ],
         },
         fromBlock: receipt.blockNumber,
@@ -423,8 +462,8 @@ export class ContractService {
     return { txHash, gameId };
   }
 
-  async joinGame(gameId: bigint): Promise<`0x${string}`> {
-    logger.info("Joining game", { gameId: gameId.toString() });
+  async joinGame(gameId: bigint, stake?: bigint): Promise<`0x${string}`> {
+    logger.info("Joining game", { gameId: gameId.toString(), stake: stake?.toString() || "0" });
 
     const txHash = await this.walletClient.writeContract({
       account: this.account,
@@ -433,10 +472,47 @@ export class ContractService {
       abi: SIMPHANTOE_ABI,
       functionName: "joinGame",
       args: [gameId],
+      value: stake ?? 0n,
     });
 
     await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     logger.info("Joined game", { gameId: gameId.toString(), txHash });
+
+    return txHash;
+  }
+
+  async cancelGame(gameId: bigint): Promise<`0x${string}`> {
+    logger.info("Cancelling game", { gameId: gameId.toString() });
+
+    const txHash = await this.walletClient.writeContract({
+      account: this.account,
+      chain: sepolia,
+      address: this.contractAddress,
+      abi: SIMPHANTOE_ABI,
+      functionName: "cancelGame",
+      args: [gameId],
+    });
+
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    logger.info("Game cancelled", { gameId: gameId.toString(), txHash });
+
+    return txHash;
+  }
+
+  async claimTimeout(gameId: bigint): Promise<`0x${string}`> {
+    logger.info("Claiming timeout", { gameId: gameId.toString() });
+
+    const txHash = await this.walletClient.writeContract({
+      account: this.account,
+      chain: sepolia,
+      address: this.contractAddress,
+      abi: SIMPHANTOE_ABI,
+      functionName: "claimTimeout",
+      args: [gameId],
+    });
+
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    logger.info("Timeout claimed", { gameId: gameId.toString(), txHash });
 
     return txHash;
   }

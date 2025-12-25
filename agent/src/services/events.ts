@@ -19,7 +19,9 @@ export type GameEventName =
   | "MovesProcessed"
   | "Collision"
   | "GameUpdated"
-  | "BoardRevealed";
+  | "BoardRevealed"
+  | "GameCancelled"
+  | "GameTimeout";
 
 // Callback type for event notifications
 export type EventCallback = (gameId: bigint, eventName: GameEventName, data?: unknown) => void | Promise<void>;
@@ -153,6 +155,8 @@ export class EventService {
       "Collision",
       "GameUpdated",
       "BoardRevealed",
+      "GameCancelled",
+      "GameTimeout",
     ];
 
     for (const eventName of eventNames) {
@@ -252,6 +256,14 @@ export class EventService {
         { name: "GameUpdated" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
         {
           name: "BoardRevealed" as const,
+          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
+        },
+        {
+          name: "GameCancelled" as const,
+          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
+        },
+        {
+          name: "GameTimeout" as const,
           filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
         },
       ];
