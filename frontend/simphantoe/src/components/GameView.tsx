@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { flushSync } from "react-dom";
+import { formatEther } from "viem";
 import { GameBoard } from "./GameBoard";
 import { MoveIndicator, CollisionNotification, GameOverNotification } from "./MoveIndicator";
 import { FHEStatus } from "./FHEStatus";
-import { useGameFlow, useStartGame } from "../hooks/useSimPhanToe";
-import { Winner, isGameFinished } from "../lib/contracts";
+import { useGameFlow, useStartGame, useCancelGame, useClaimTimeout } from "../hooks/useSimPhanToe";
+import { Winner, isGameFinished, isGameCancelled } from "../lib/contracts";
 
 interface GameViewProps {
   gameId: bigint;
@@ -50,11 +51,79 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
     setShowGameOver,
     lastWinner,
     boardRevealed: boardIsRevealed,
+    payoutTxHash: gameFlowPayoutTxHash,
   } = useGameFlow(gameId);
 
   const { startGame } = useStartGame();
+  const { cancelGame, isPending: isCancelling } = useCancelGame();
+  const { claimTimeout, isPending: isClaimingTimeout } = useClaimTimeout();
   const [collisionCell, setCollisionCell] = useState<{ x: number; y: number } | null>(null);
   const [isPendingSubmit, setIsPendingSubmit] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
+  const [localPayoutTxHash, setLocalPayoutTxHash] = useState<`0x${string}` | null>(null);
+  
+  // Use either the local payout tx (from timeout claim) or the one from game flow (from regular finalization)
+  const payoutTxHash = localPayoutTxHash ?? gameFlowPayoutTxHash;
+
+  // Update current time every second for countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate timeout status
+  const timeoutInfo = useMemo(() => {
+    if (!game || !game.lastActionTimestamp || game.lastActionTimestamp === 0n) {
+      return { deadline: 0, remaining: 0, isExpired: false, canClaim: false };
+    }
+    const deadline = Number(game.lastActionTimestamp) + Number(game.moveTimeout);
+    const remaining = Math.max(0, deadline - currentTime);
+    const isExpired = remaining === 0;
+    // Can claim if expired and opponent hasn't completed their move
+    const canClaim = isExpired && !isGameFinished(game) && !waitingForOpponent;
+    return { deadline, remaining, isExpired, canClaim };
+  }, [game, currentTime, waitingForOpponent]);
+
+  // Format remaining time
+  const formatRemainingTime = (seconds: number) => {
+    if (seconds <= 0) return "Expired";
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `${days}d ${hours % 24}h`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    }
+    return `${secs}s`;
+  };
+
+  const handleCancelGame = async () => {
+    try {
+      await cancelGame(gameId);
+      onBack();
+    } catch (error) {
+      console.error("Failed to cancel game:", error);
+    }
+  };
+
+  const handleClaimTimeout = async () => {
+    try {
+      const txHash = await claimTimeout(gameId);
+      if (txHash) {
+        setLocalPayoutTxHash(txHash);
+      }
+    } catch (error) {
+      console.error("Failed to claim timeout:", error);
+    }
+  };
 
   const handleCellClick = useCallback(
     (x: number, y: number) => {
@@ -85,7 +154,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
 
   const handleNewGame = async () => {
     try {
-      await startGame();
+      await startGame(86400n); // Default 24h timeout for new games from here
       onBack();
     } catch (error) {
       console.error("Failed to start new game:", error);
@@ -107,7 +176,9 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
     isDecryptingState ||
     isFinalizingState ||
     isRevealingBoard ||
-    isDecryptingBoard;
+    isDecryptingBoard ||
+    isCancelling ||
+    isClaimingTimeout;
 
   // When user becomes a player (join transaction confirmed), notify parent
   useEffect(() => {
@@ -187,6 +258,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
   }
 
   const isGameOver = isGameFinished(game);
+  const isCancelled = isGameCancelled(game);
   const winnerType = lastWinner === Winner.Player1 ? "player1" : lastWinner === Winner.Player2 ? "player2" : "draw";
 
   // Determine user's result for finished games
@@ -231,10 +303,30 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
         </div>
       </div>
 
+      {/* Cancelled Game Banner */}
+      {isCancelled && (
+        <div className="mb-6 p-4 rounded-xl bg-gray-500/20 border border-gray-500/30">
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-3xl">✕</span>
+            <div className="text-center">
+              <h3 className="font-display text-xl font-bold text-gray-400">Game Cancelled</h3>
+              <p className="text-sm text-gray-500">
+                This game was cancelled before it started.
+              </p>
+              {game.stake > 0n && isPlayer1 && (
+                <p className="text-sm text-green-400 mt-1">
+                  Your stake of {formatEther(game.stake)} ETH has been refunded.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Winner Banner for finished games */}
-      {isGameOver && userResult && (
+      {isGameOver && !isCancelled && userResult && (
         <div
-          className={`mb-6 p-4 rounded-xl text-center ${
+          className={`mb-6 p-4 rounded-xl ${
             userResult === "won"
               ? "bg-green-500/20 border border-green-500/30"
               : userResult === "lost"
@@ -244,7 +336,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
         >
           <div className="flex items-center justify-center gap-3">
             <span className="text-3xl">{userResult === "won" ? "🏆" : userResult === "lost" ? "👻" : "🤝"}</span>
-            <div>
+            <div className="text-center">
               <h3
                 className={`font-display text-xl font-bold ${
                   userResult === "won" ? "text-green-500" : userResult === "lost" ? "text-red-500" : "text-gray-400"
@@ -259,6 +351,36 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                     ? "The phantom got you this time."
                     : "Both players achieved victory simultaneously!"}
               </p>
+              {/* Payout info */}
+              {game.stake > 0n && (
+                <div className="mt-2 pt-2 border-t border-white/10">
+                  <p className={`text-sm font-medium ${
+                    userResult === "won" ? "text-green-400" : userResult === "lost" ? "text-red-400" : "text-gray-400"
+                  }`}>
+                    {userResult === "won" 
+                      ? `+${formatEther(game.stake * 2n)} ETH collected` 
+                      : userResult === "lost"
+                        ? `-${formatEther(game.stake)} ETH`
+                        : `${formatEther(game.stake)} ETH returned`}
+                  </p>
+                  {/* Transaction link for payouts */}
+                  {payoutTxHash && (
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${payoutTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-cyber-cyan hover:text-cyber-cyan/80 mt-1"
+                    >
+                      View transaction
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -402,6 +524,74 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
             />
           )}
 
+          {/* Timeout Countdown - shown during active game */}
+          {!isGameOver && !waitingForOpponent && game.lastActionTimestamp > 0n && (
+            <div className={`glass p-4 ${timeoutInfo.isExpired ? 'bg-red-500/20 border-red-500/30' : ''}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    timeoutInfo.isExpired ? 'bg-red-500/20' : timeoutInfo.remaining < 3600 ? 'bg-yellow-500/20' : 'bg-gray-700'
+                  }`}>
+                    <svg className={`w-5 h-5 ${
+                      timeoutInfo.isExpired ? 'text-red-500' : timeoutInfo.remaining < 3600 ? 'text-yellow-500 animate-pulse' : 'text-gray-400'
+                    }`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Move Deadline</p>
+                    <p className={`font-display font-bold ${
+                      timeoutInfo.isExpired ? 'text-red-500' : timeoutInfo.remaining < 3600 ? 'text-yellow-500' : 'text-white'
+                    }`}>
+                      {formatRemainingTime(timeoutInfo.remaining)}
+                    </p>
+                  </div>
+                </div>
+                {timeoutInfo.canClaim && (
+                  <button
+                    onClick={handleClaimTimeout}
+                    disabled={isClaimingTimeout}
+                    className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 rounded-lg font-medium transition-colors"
+                  >
+                    {isClaimingTimeout ? 'Claiming...' : 'Claim Victory'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cancel Game Button - for player1 waiting for opponent */}
+          {waitingForOpponent && isPlayer1 && (
+            <div className="glass p-4 bg-yellow-500/10 border-yellow-500/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 6v6l4 2" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-yellow-500">Waiting for opponent</p>
+                    <p className="text-xs text-gray-500">
+                      {game.stake > 0n 
+                        ? `${formatEther(game.stake)} ETH staked — will be refunded if cancelled` 
+                        : 'Cancel anytime before someone joins'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCancelGame}
+                  disabled={isCancelling}
+                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-lg font-medium transition-colors"
+                >
+                  {isCancelling ? 'Cancelling...' : 'Cancel Game'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Game Info */}
           <div className="card">
             <h3 className="font-display text-lg font-semibold mb-4 flex items-center gap-2">
@@ -415,6 +605,23 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
               </span>
             </h3>
             <div className="space-y-3 text-sm">
+              {/* Stake info */}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Stake</span>
+                <span className={game.stake > 0n ? "text-yellow-500 font-semibold" : "text-gray-500"}>
+                  {game.stake > 0n ? (
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v12M8 10h8M8 14h8" />
+                      </svg>
+                      {formatEther(game.stake)} ETH each ({formatEther(game.stake * 2n)} pot)
+                    </span>
+                  ) : (
+                    "Free game"
+                  )}
+                </span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Your Symbol</span>
                 <span className={`font-bold ${isPlayer1 ? "text-cyber-purple" : "text-cyber-cyan"}`}>
@@ -429,6 +636,18 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                   }`}
                 >
                   {isGameOver ? "Finished" : waitingForOpponent ? "Waiting for Player 2" : "In Progress"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Move Timeout</span>
+                <span className="text-gray-400 flex items-center gap-1">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  {Number(game.moveTimeout) >= 86400 
+                    ? `${Math.round(Number(game.moveTimeout) / 86400)} days`
+                    : `${Math.round(Number(game.moveTimeout) / 3600)} hours`}
                 </span>
               </div>
               <div className="flex justify-between">

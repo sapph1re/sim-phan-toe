@@ -110,6 +110,7 @@ interface WriteContractParams {
   abi: Abi;
   functionName: string;
   args?: readonly unknown[];
+  value?: bigint;
 }
 
 interface UseSponsoredWriteContractReturn {
@@ -143,7 +144,7 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
 
   const writeContractAsync = useCallback(
     async (params: WriteContractParams): Promise<`0x${string}`> => {
-      const { address, abi, functionName, args } = params;
+      const { address, abi, functionName, args, value } = params;
 
       setIsPending(true);
       setIsSuccess(false);
@@ -211,6 +212,7 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
                   to: address,
                   data,
                   chainId: 11155111, // Sepolia
+                  value: value ? `0x${value.toString(16)}` : undefined,
                 },
                 {
                   // Enable gas sponsorship - Privy will pay gas fees from your credits
@@ -267,6 +269,7 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
             abi,
             functionName,
             args: args as readonly unknown[],
+            value,
           });
 
           setIsSuccess(true);

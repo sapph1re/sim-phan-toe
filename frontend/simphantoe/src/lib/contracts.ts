@@ -9,6 +9,8 @@ export const SIMPHANTOE_ABI = [
     inputs: [
       { name: "gameId", type: "uint256", indexed: true },
       { name: "player1", type: "address", indexed: true },
+      { name: "stake", type: "uint256", indexed: false },
+      { name: "moveTimeout", type: "uint256", indexed: false },
     ],
   },
   {
@@ -66,6 +68,19 @@ export const SIMPHANTOE_ABI = [
     name: "BoardRevealed",
     inputs: [{ name: "gameId", type: "uint256", indexed: true }],
   },
+  {
+    type: "event",
+    name: "GameCancelled",
+    inputs: [{ name: "gameId", type: "uint256", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "GameTimeout",
+    inputs: [
+      { name: "gameId", type: "uint256", indexed: true },
+      { name: "winner", type: "address", indexed: true },
+    ],
+  },
   // Read functions
   {
     type: "function",
@@ -88,6 +103,9 @@ export const SIMPHANTOE_ABI = [
       { name: "eCollision", type: "bytes32" }, // ebool handle
       { name: "board", type: "uint8[4][4]" }, // cleartext board (revealed after game ends)
       { name: "winner", type: "uint8" }, // cleartext winner enum
+      { name: "stake", type: "uint256" },
+      { name: "moveTimeout", type: "uint256" },
+      { name: "lastActionTimestamp", type: "uint256" },
     ],
     stateMutability: "view",
   },
@@ -108,6 +126,9 @@ export const SIMPHANTOE_ABI = [
           { name: "eCollision", type: "bytes32" }, // ebool handle
           { name: "board", type: "uint8[4][4]" }, // cleartext board
           { name: "winner", type: "uint8" }, // cleartext winner enum
+          { name: "stake", type: "uint256" },
+          { name: "moveTimeout", type: "uint256" },
+          { name: "lastActionTimestamp", type: "uint256" },
         ],
       },
     ],
@@ -190,13 +211,27 @@ export const SIMPHANTOE_ABI = [
   {
     type: "function",
     name: "startGame",
-    inputs: [],
+    inputs: [{ name: "_moveTimeout", type: "uint256" }],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "joinGame",
+    inputs: [{ name: "_gameId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "cancelGame",
+    inputs: [{ name: "_gameId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",
   },
   {
     type: "function",
-    name: "joinGame",
+    name: "claimTimeout",
     inputs: [{ name: "_gameId", type: "uint256" }],
     outputs: [],
     stateMutability: "nonpayable",
@@ -266,6 +301,7 @@ export enum Winner {
   Player1 = 1,
   Player2 = 2,
   Draw = 3,
+  Cancelled = 4,
 }
 
 // Game type for TypeScript
@@ -281,6 +317,9 @@ export interface Game {
   // Cleartext board (revealed after game ends)
   board: readonly (readonly number[])[];
   winner: number; // Cleartext winner enum
+  stake: bigint; // ETH stake for the game
+  moveTimeout: bigint; // Time limit for making moves
+  lastActionTimestamp: bigint; // Timestamp of last action requiring a response
 }
 
 // Move type for SimPhanToe
@@ -325,9 +364,25 @@ export interface FHEOperationStatus {
   isLoading: boolean;
 }
 
-// Helper to check if game is finished
+// Helper to check if game is finished (includes cancelled games)
 export function isGameFinished(game: Game | undefined): boolean {
   return game !== undefined && game.winner !== Winner.None;
+}
+
+// Helper to check if game was cancelled
+export function isGameCancelled(game: Game | undefined): boolean {
+  return game !== undefined && game.winner === Winner.Cancelled;
+}
+
+// Helper to check if timeout can be claimed
+export function canClaimTimeout(
+  game: Game | undefined,
+  currentTimestamp: bigint,
+): boolean {
+  if (!game || game.winner !== Winner.None) return false;
+  if (game.player2 === "0x0000000000000000000000000000000000000000") return false;
+  if (game.lastActionTimestamp === 0n) return false;
+  return currentTimestamp > game.lastActionTimestamp + game.moveTimeout;
 }
 
 // Helper to check if board is revealed (any non-zero cell in cleartext board)

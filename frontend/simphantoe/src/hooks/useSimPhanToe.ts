@@ -175,16 +175,21 @@ export function useStartGame() {
   const { writeContractAsync, isPending, isSuccess, error } = useSponsoredWriteContract();
   const queryClient = useQueryClient();
 
-  const startGame = useCallback(async () => {
-    if (!address) throw new Error("Contract not configured");
-    const result = await writeContractAsync({
-      address,
-      abi: SIMPHANTOE_ABI,
-      functionName: "startGame",
-    });
-    queryClient.invalidateQueries({ queryKey: ["readContract"] });
-    return result;
-  }, [address, writeContractAsync, queryClient]);
+  const startGame = useCallback(
+    async (moveTimeout: bigint, stake?: bigint) => {
+      if (!address) throw new Error("Contract not configured");
+      const result = await writeContractAsync({
+        address,
+        abi: SIMPHANTOE_ABI,
+        functionName: "startGame",
+        args: [moveTimeout],
+        value: stake ?? 0n,
+      });
+      queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      return result;
+    },
+    [address, writeContractAsync, queryClient],
+  );
 
   return { startGame, isPending, isSuccess, error };
 }
@@ -196,13 +201,14 @@ export function useJoinGame() {
   const queryClient = useQueryClient();
 
   const joinGame = useCallback(
-    async (gameId: bigint) => {
+    async (gameId: bigint, stake?: bigint) => {
       if (!address) throw new Error("Contract not configured");
       const result = await writeContractAsync({
         address,
         abi: SIMPHANTOE_ABI,
         functionName: "joinGame",
         args: [gameId],
+        value: stake ?? 0n,
       });
       queryClient.invalidateQueries({ queryKey: ["readContract"] });
       return result;
@@ -211,6 +217,54 @@ export function useJoinGame() {
   );
 
   return { joinGame, isPending, isSuccess, error };
+}
+
+// Hook to cancel a game (only player1, before player2 joins)
+export function useCancelGame() {
+  const { address } = useContractAddress();
+  const { writeContractAsync, isPending, isSuccess, error } = useSponsoredWriteContract();
+  const queryClient = useQueryClient();
+
+  const cancelGame = useCallback(
+    async (gameId: bigint) => {
+      if (!address) throw new Error("Contract not configured");
+      const result = await writeContractAsync({
+        address,
+        abi: SIMPHANTOE_ABI,
+        functionName: "cancelGame",
+        args: [gameId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      return result;
+    },
+    [address, writeContractAsync, queryClient],
+  );
+
+  return { cancelGame, isPending, isSuccess, error };
+}
+
+// Hook to claim timeout victory
+export function useClaimTimeout() {
+  const { address } = useContractAddress();
+  const { writeContractAsync, isPending, isSuccess, error } = useSponsoredWriteContract();
+  const queryClient = useQueryClient();
+
+  const claimTimeout = useCallback(
+    async (gameId: bigint) => {
+      if (!address) throw new Error("Contract not configured");
+      const result = await writeContractAsync({
+        address,
+        abi: SIMPHANTOE_ABI,
+        functionName: "claimTimeout",
+        args: [gameId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      return result;
+    },
+    [address, writeContractAsync, queryClient],
+  );
+
+  return { claimTimeout, isPending, isSuccess, error };
 }
 
 // Hook to submit an encrypted move (FHE)
@@ -447,7 +501,17 @@ export function useGameEvents(gameId: bigint | undefined, options?: { enabled?: 
   const { address } = useContractAddress();
   const queryClient = useQueryClient();
   const [lastEvent, setLastEvent] = useState<{
-    type: "submitted" | "invalid" | "made" | "processed" | "collision" | "updated" | "joined" | "revealed";
+    type:
+      | "submitted"
+      | "invalid"
+      | "made"
+      | "processed"
+      | "collision"
+      | "updated"
+      | "joined"
+      | "revealed"
+      | "cancelled"
+      | "timeout";
     data: unknown;
   } | null>(null);
 
@@ -560,6 +624,34 @@ export function useGameEvents(gameId: bigint | undefined, options?: { enabled?: 
       const relevant = logs.find((log) => log.args.gameId === gameId);
       if (relevant) {
         setLastEvent({ type: "revealed", data: relevant.args });
+        queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      }
+    },
+    enabled: isEnabled,
+  });
+
+  useWatchContractEvent({
+    address,
+    abi: SIMPHANTOE_ABI,
+    eventName: "GameCancelled",
+    onLogs: (logs) => {
+      const relevant = logs.find((log) => log.args.gameId === gameId);
+      if (relevant) {
+        setLastEvent({ type: "cancelled", data: relevant.args });
+        queryClient.invalidateQueries({ queryKey: ["readContract"] });
+      }
+    },
+    enabled: isEnabled,
+  });
+
+  useWatchContractEvent({
+    address,
+    abi: SIMPHANTOE_ABI,
+    eventName: "GameTimeout",
+    onLogs: (logs) => {
+      const relevant = logs.find((log) => log.args.gameId === gameId);
+      if (relevant) {
+        setLastEvent({ type: "timeout", data: relevant.args });
         queryClient.invalidateQueries({ queryKey: ["readContract"] });
       }
     },
@@ -725,6 +817,7 @@ export function useGameFlow(gameId: bigint | undefined) {
   const [canRetry, setCanRetry] = useState(false);
   const [pendingRetryAction, setPendingRetryAction] = useState<(() => Promise<void>) | null>(null);
   const [boardRevealed, setBoardRevealed] = useState(false);
+  const [payoutTxHash, setPayoutTxHash] = useState<`0x${string}` | null>(null);
 
   // State trigger to force effect re-runs (refs don't trigger re-renders)
   const [revealBoardTrigger, setRevealBoardTrigger] = useState(0);
@@ -939,7 +1032,7 @@ export function useGameFlow(gameId: bigint | undefined) {
         }
 
         setFheStatus({ type: "decrypt", message: "Decrypting result..." });
-        const { winner, collision } = await finalizeGameState(gameId, winnerHandle, collisionHandle);
+        const { txHash, winner, collision } = await finalizeGameState(gameId, winnerHandle, collisionHandle);
 
         // Mark these handles as processed
         processedHandlesRef.current.add(handleKey);
@@ -953,6 +1046,8 @@ export function useGameFlow(gameId: bigint | undefined) {
           if (winner !== Winner.None) {
             setLastWinner(winner);
             setShowGameOver(true);
+            // Store the payout transaction hash for display
+            setPayoutTxHash(txHash);
             // Trigger board reveal
             needsRevealBoardRef.current = true;
           }
@@ -1177,5 +1272,6 @@ export function useGameFlow(gameId: bigint | undefined) {
     setShowGameOver,
     lastWinner,
     boardRevealed,
+    payoutTxHash,
   };
 }
