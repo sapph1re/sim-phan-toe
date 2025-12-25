@@ -19,22 +19,22 @@ export async function waitForOpponent(state: AgentState): Promise<Partial<AgentS
   const waitingMinutes = Math.floor(waitingMs / 60000);
   const waitingHours = (waitingMs / (1000 * 60 * 60)).toFixed(1);
 
-  // Log what we're waiting for (informational only - no errors for waiting!)
+  // Log what we're waiting for at debug level (reduces noise from non-action steps)
   if (currentPhase === GamePhase.WaitingForOpponent) {
     if (waitingMinutes < 1) {
-      logger.info(`Waiting for opponent to join game ${gameId}...`);
+      logger.debug(`Waiting for opponent to join game ${gameId}...`);
     } else if (waitingMinutes < 60) {
-      logger.info(`Still waiting for opponent to join game ${gameId}`, { waitingMinutes });
+      logger.debug(`Still waiting for opponent to join game ${gameId}`, { waitingMinutes });
     } else {
-      logger.info(`Still waiting for opponent to join game ${gameId}`, { waitingHours: `${waitingHours}h` });
+      logger.debug(`Still waiting for opponent to join game ${gameId}`, { waitingHours: `${waitingHours}h` });
     }
   } else if (currentPhase === GamePhase.WaitingForOpponentMove) {
     if (waitingMinutes < 1) {
-      logger.info(`Waiting for opponent's move in game ${gameId}...`);
+      logger.debug(`Waiting for opponent's move in game ${gameId}...`);
     } else if (waitingMinutes < 60) {
-      logger.info(`Waiting for opponent's move in game ${gameId}`, { waitingMinutes });
+      logger.debug(`Waiting for opponent's move in game ${gameId}`, { waitingMinutes });
     } else {
-      logger.info(`Waiting for opponent's move in game ${gameId}`, { waitingHours: `${waitingHours}h` });
+      logger.debug(`Waiting for opponent's move in game ${gameId}`, { waitingHours: `${waitingHours}h` });
     }
   } else if (currentPhase === GamePhase.Idle) {
     logger.debug("Waiting in idle state");

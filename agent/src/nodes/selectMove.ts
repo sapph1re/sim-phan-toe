@@ -165,7 +165,11 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
       }
     }
 
-    logger.info("Selected move", { x: selectedMove.x, y: selectedMove.y });
+    logger.info("AI selected move", { 
+      x: selectedMove.x, 
+      y: selectedMove.y,
+      round: currentRound + 1,
+    });
 
     return {
       pendingMove: selectedMove,
@@ -277,8 +281,9 @@ Respond with JSON only: {"x": <0-3>, "y": <0-3>, "reasoning": "<brief>"}`;
     throw new Error(`Coordinates out of bounds: (${move.x}, ${move.y})`);
   }
 
+  // Log LLM reasoning at info level to show the AI's thought process
   if (move.reasoning) {
-    logger.debug("LLM reasoning", { reasoning: move.reasoning });
+    logger.info("AI thinking", { reasoning: move.reasoning });
   }
 
   return { x: move.x, y: move.y };

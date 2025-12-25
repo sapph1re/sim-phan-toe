@@ -1,5 +1,7 @@
 // Multi-game orchestrator with round-robin processing and auto-open-game
-// Processes all active games, maintaining exactly one open game for new opponents
+// Processes all active games, maintaining two open games for new opponents:
+// - One free game (no stake)
+// - One paid game (0.01 ETH stake) when balance permits
 
 import { createLogger } from "./utils/logger.js";
 import { sleep } from "./utils/retry.js";
@@ -25,6 +27,10 @@ const LOW_BALANCE_WEI = 50_000_000_000_000_000n; // 0.05 ETH - warning threshold
 const MIN_BALANCE_WEI = 10_000_000_000_000_000n; // 0.01 ETH - stop threshold
 const BALANCE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 const BALANCE_LOG_INTERVAL_MS = 30 * 60 * 1000; // Log every 30 minutes
+
+// Game creation constants
+const PAID_GAME_STAKE = 10_000_000_000_000_000n; // 0.01 ETH
+const MIN_BALANCE_FOR_PAID_GAME = 15_000_000_000_000_000n; // 0.015 ETH (stake + gas buffer)
 
 export class GameOrchestrator {
   private contractAddress: `0x${string}`;
@@ -160,8 +166,8 @@ export class GameOrchestrator {
       return;
     }
 
-    // 1. Ensure we have exactly one open game waiting for opponents
-    await this.ensureOpenGame();
+    // 1. Ensure we have open games waiting for opponents (free + paid)
+    await this.ensureOpenGames();
 
     // 2. Get games that need checking now
     const gamesToCheck = await gameStore.getGamesReadyToCheck(CHAIN_ID, this.contractAddress);
@@ -195,41 +201,98 @@ export class GameOrchestrator {
   }
 
   /**
-   * Ensure we have exactly one open game waiting for opponents
+   * Check if we have enough balance to create a paid game
    */
-  private async ensureOpenGame(): Promise<void> {
+  private async hasBalanceForPaidGame(): Promise<boolean> {
+    try {
+      const contract = getContractService();
+      const balance = await contract.getBalance();
+      return balance >= MIN_BALANCE_FOR_PAID_GAME;
+    } catch (error) {
+      logger.error("Failed to check balance for paid game", error);
+      return false;
+    }
+  }
+
+  /**
+   * Create a new open game with specified stake
+   */
+  private async createOpenGame(stake: bigint): Promise<void> {
+    const contract = getContractService();
+    const stakeEth = Number(stake) / 1e18;
+
+    logger.info("Creating open game", {
+      stake: stake === 0n ? "free" : `${stakeEth} ETH`,
+    });
+
+    try {
+      const { gameId, txHash } = await contract.startGame(DEFAULT_MOVE_TIMEOUT, stake);
+
+      // Create game record in DB
+      const gameKey = createGameKey(CHAIN_ID, this.contractAddress, gameId);
+      await gameStore.createGame(gameKey, {
+        playerAddress: this.playerAddress,
+        isPlayer1: true,
+        currentPhase: GamePhase.WaitingForOpponent,
+        status: "active",
+        nextCheckAt: new Date(Date.now() + 20_000), // Check in 20s
+      });
+
+      logger.info("Created open game", {
+        gameId: gameId.toString(),
+        txHash,
+        stake: stake === 0n ? "free" : `${stakeEth} ETH`,
+        timeout: DEFAULT_MOVE_TIMEOUT.toString(),
+      });
+    } catch (error) {
+      logger.error("Failed to create open game", error, {
+        stake: stake === 0n ? "free" : `${stakeEth} ETH`,
+      });
+      // Don't throw - we'll try again next cycle
+    }
+  }
+
+  /**
+   * Ensure we have two open games waiting for opponents:
+   * - One free game (stake = 0)
+   * - One paid game (stake = 0.01 ETH) if balance permits
+   */
+  private async ensureOpenGames(): Promise<void> {
     const openGames = await gameStore.getGamesWaitingForOpponent(CHAIN_ID, this.contractAddress);
+    const contract = getContractService();
 
-    if (openGames.length === 0) {
-      logger.info("No open game found, creating one for new players...");
+    // Categorize open games by stake
+    const freeGames: GameRecord[] = [];
+    const paidGames: GameRecord[] = [];
 
+    for (const game of openGames) {
       try {
-        const contract = getContractService();
-        // Create game with default timeout (24 hours), no stake
-        const { gameId, txHash } = await contract.startGame(DEFAULT_MOVE_TIMEOUT);
-
-        // Create game record in DB
-        const gameKey = createGameKey(CHAIN_ID, this.contractAddress, gameId);
-        await gameStore.createGame(gameKey, {
-          playerAddress: this.playerAddress,
-          isPlayer1: true,
-          currentPhase: GamePhase.WaitingForOpponent,
-          status: "active",
-          nextCheckAt: new Date(Date.now() + 20_000), // Check in 20s
-        });
-
-        logger.info("Created open game", {
-          gameId: gameId.toString(),
-          txHash,
-          timeout: DEFAULT_MOVE_TIMEOUT.toString(),
-        });
+        const gameData = await contract.getGame(game.game_id);
+        if (gameData.stake === 0n) {
+          freeGames.push(game);
+        } else {
+          paidGames.push(game);
+        }
       } catch (error) {
-        logger.error("Failed to create open game", error);
-        // Don't throw - we'll try again next cycle
+        logger.warn("Failed to fetch game data for categorization", {
+          gameId: game.game_id.toString(),
+        });
       }
-    } else if (openGames.length > 1) {
-      logger.warn("Multiple open games found", { count: openGames.length });
-      // This shouldn't happen, but we'll just let them be
+    }
+
+    // Create missing free game
+    if (freeGames.length === 0) {
+      await this.createOpenGame(0n);
+    }
+
+    // Create missing paid game if balance permits
+    if (paidGames.length === 0) {
+      const canCreatePaid = await this.hasBalanceForPaidGame();
+      if (canCreatePaid) {
+        await this.createOpenGame(PAID_GAME_STAKE);
+      } else {
+        logger.debug("Skipping paid game creation - insufficient balance");
+      }
     }
   }
 
