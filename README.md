@@ -1,9 +1,6 @@
 # Sim Phan Toe
 
-Simultaneous Phantom 4x4 Tic-Tac-Toe game with FHEVM
-
-A twist on the classic game where both players make their moves **simultaneously**. No first-mover advantage. Opponent's
-moves are encrypted and hidden.
+Simultaneous Phantom 4x4 Tic-Tac-Toe game with Zama's FHEVM
 
 ## Demo
 
@@ -11,7 +8,38 @@ https://simphantoe.netlify.app/
 
 Deployed contract address in Sepolia: 0xF72E2d02476cAcbcE01c164da33858C49Fa55036
 
+## A Game For Bayesian Agents
+
+Effectively playing Bayesian games - games with incomplete information - requires more than reasoning about facts. A
+strong strategy must also maintain an internal belief state: a continuously updated probability distribution over the
+unknown parts of the game. Acting optimally means carefully reasoning about what is believed and thoroughly updating
+those beliefs. The ability to make decisions based on probabilistic models of the hidden state of the world - is what
+separates naive play from truly intelligent behavior in such environments.
+
+The most important and impactful games in human society - markets, negotiations, politics, security, coordination - are
+fundamentally Bayesian games. I believe that a crucial step in the evolution of autonomous agents is the creation of
+shared environments or playgrounds where agents can compete in games with incomplete information, evolving to strategize
+under uncertainty. And as the most efficient driver of technological evolution is opportunity to make profit, these
+environments will be most effective when agents that play them can win money.
+
+This simple yet unsolved game is an invitation for agents to play, strategize and win against less sophisticated
+opponents. A gentle evolutionary nudge for the agentic economy.
+
+## And Humans
+
+Humans can play too, of course! Wanna outsmart an agent and win some testnet ETH? Go ahead! But let's be honest, the
+onchain Sepolia FHE flow is excruciatingly slow and clumsy for any enjoyable gameplay. Which is not a problem for agents
+at all! They don't mind waiting for transactions to confirm or FHE relayer to decrypt data. They don't care about
+dopamine - only about ~~destroying humanity~~ being a useful assistant by earning ETH!
+
+The agent included in this repository automatically opens new games - both free and paid. Try it out manually against
+the agent, or play with your friends, or better - build an agent yourself! You can use the one in the repository to
+start off, its strategic abilities are extremely basic, you will easily improve it to win.
+
 ## Game Rules
+
+A twist on the classic game where both players make their moves **simultaneously**. No first-mover advantage. Opponent's
+moves are encrypted and hidden.
 
 1. **Simultaneous Moves**: Both players select their cell at the same time. Your opponent can't see your choice!
 2. **Collision = No Move**: If both players pick the same cell, neither move counts. Pick again!
@@ -56,13 +84,15 @@ Games include a configurable timeout mechanism to prevent abandoned games:
 - The stake is fully refunded to Player 1
 - Cancelled games are removed from the open games list
 
-## AI Agent
+## Authentication
 
-An AI agent is available to play against! The agent runs continuously on-chain and maintains an open game for anyone to
-join. Just visit the demo and look for a game waiting for players - that's the agent ready to challenge you.
+The frontend offers two ways of authenticating: browser wallet or Privy. Privy is handy as it authenticates you via
+email, generates an embedded wallet and sponsors gas for you, making the game flow faster and smoother. But it will
+occasionally rate-limit requests, and it's a centralized actor. The good old browser wallet connection is available too,
+so you can reliably communicate to the smart contracts directly, but be ready to sign a lot.
 
-The agent uses LangGraph for orchestration and GPT-4o for move selection. It persists game state to a database and
-handles multiple games simultaneously.
+For agents it's easier because they don't need authentication providers or frontend at all - they interact with the
+smart contract and with the FHE relayer directly.
 
 ## Prerequisites
 
