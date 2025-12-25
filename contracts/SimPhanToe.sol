@@ -360,7 +360,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         }
 
         game.winner = winner;
-        
+
         // Clean up moves
         delete nextMoves[_gameId][game.player1];
         delete nextMoves[_gameId][game.player2];
@@ -368,8 +368,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         // Distribute prizes
         _distributePrizes(_gameId);
 
-        address winnerAddress = winner == Winner.Player1 ? game.player1 :
-            (winner == Winner.Player2 ? game.player2 : address(0));
+        address winnerAddress = winner == Winner.Player1
+            ? game.player1
+            : (winner == Winner.Player2 ? game.player2 : address(0));
         emit GameTimeout(_gameId, winnerAddress);
     }
 
@@ -378,7 +379,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     function _distributePrizes(uint256 _gameId) private {
         Game storage game = games[_gameId];
         uint256 totalStake = game.stake * 2;
-        
+
         if (totalStake == 0) return;
 
         // Clear stake to prevent re-entrancy

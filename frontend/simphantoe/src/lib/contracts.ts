@@ -375,10 +375,7 @@ export function isGameCancelled(game: Game | undefined): boolean {
 }
 
 // Helper to check if timeout can be claimed
-export function canClaimTimeout(
-  game: Game | undefined,
-  currentTimestamp: bigint,
-): boolean {
+export function canClaimTimeout(game: Game | undefined, currentTimestamp: bigint): boolean {
   if (!game || game.winner !== Winner.None) return false;
   if (game.player2 === "0x0000000000000000000000000000000000000000") return false;
   if (game.lastActionTimestamp === 0n) return false;
