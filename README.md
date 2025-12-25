@@ -28,6 +28,34 @@ Deployed contract address in Sepolia: 0x52507f480444c844b1AB304f4Cbc5fED6077E8f0
 The board is changed to 4x4 because when players move simultaneously they always fill an even number of cells, so a 3x3
 board would often draw at 8 moves with an empty cell left. A 4x4 board allows for a more interesting game.
 
+## Staking & Timeouts
+
+### ETH Staking
+
+Players can stake ETH on games:
+
+- **Starting a game**: Player 1 sets the stake amount (can be 0 for free games)
+- **Joining a game**: Player 2 must match the exact stake amount to join
+- **Prize distribution**:
+  - **Winner**: Receives the full pot (2x stake)
+  - **Draw**: Each player receives their stake back
+  - **Cancelled**: Player 1 receives their stake back (only possible before Player 2 joins)
+
+### Move Timeouts
+
+Games include a configurable timeout mechanism to prevent abandoned games:
+
+- **Timeout range**: 1 hour to 7 days (configurable when starting a game)
+- **Timeout trigger**: If a player fails to submit and finalize their move within the timeout period
+- **Claiming victory**: The player who completed their move can claim victory if their opponent times out
+- **Both timeout**: If both players time out, the game ends in a draw
+
+### Cancellation
+
+- Player 1 can cancel a game **before Player 2 joins**
+- The stake is fully refunded to Player 1
+- Cancelled games are removed from the open games list
+
 ## AI Agent
 
 An AI agent is available to play against! The agent runs continuously on-chain and maintains an open game for anyone to
