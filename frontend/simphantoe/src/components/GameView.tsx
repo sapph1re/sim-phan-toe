@@ -583,8 +583,8 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
             </div>
           )}
 
-          {/* Cancel Game Button - for player1 waiting for opponent */}
-          {waitingForOpponent && isPlayer1 && (
+          {/* Cancel Game Button - for player1 waiting for opponent (not shown if already cancelled) */}
+          {waitingForOpponent && isPlayer1 && !isCancelled && (
             <div className="glass p-4 bg-yellow-500/10 border-yellow-500/30">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -795,7 +795,15 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                       <span className="ml-1 text-green-500">Winner!</span>
                     )}
                   </p>
-                  <p className="font-mono text-sm truncate">{waitingForOpponent ? "Waiting..." : game.player2}</p>
+                  <p className="font-mono text-sm truncate">
+                    {isCancelled ? (
+                      <span className="text-gray-500 italic">No player joined</span>
+                    ) : waitingForOpponent ? (
+                      "Waiting..."
+                    ) : (
+                      game.player2
+                    )}
+                  </p>
                 </div>
               </div>
             </div>

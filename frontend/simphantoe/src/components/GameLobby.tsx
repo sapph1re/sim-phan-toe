@@ -43,6 +43,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
   const [showNewGameForm, setShowNewGameForm] = useState(false);
   const [stakeInput, setStakeInput] = useState("");
   const [selectedTimeout, setSelectedTimeout] = useState(TIMEOUT_OPTIONS[2].value); // Default 24h
+  const [isCreatingGame, setIsCreatingGame] = useState(false); // Local state for immediate UI feedback
 
   // Parse stake input and calculate validation (only for staked games)
   const stakeWei = useMemo(() => {
@@ -60,6 +61,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
   const showStakeWarning = isStakedGame && !canAffordCurrentStake;
 
   const handleStartGame = async () => {
+    setIsCreatingGame(true); // Show overlay immediately
     try {
       const stake = stakeInput ? parseEther(stakeInput) : 0n;
       await startGame(selectedTimeout, stake);
@@ -67,6 +69,8 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
       setStakeInput("");
     } catch (error) {
       console.error("Failed to start game:", error);
+    } finally {
+      setIsCreatingGame(false);
     }
   };
 
@@ -93,8 +97,8 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
       return !playerGames?.includes(id);
     }) ?? [];
 
-  // Show creating game overlay
-  if (startPending) {
+  // Show creating game overlay (use local state for immediate feedback)
+  if (isCreatingGame || startPending) {
     return (
       <div className="space-y-8 animate-fade-in">
         <div className="flex items-center justify-center min-h-[40vh]">
@@ -163,7 +167,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
         {!showNewGameForm ? (
           <button
             onClick={() => setShowNewGameForm(true)}
-            disabled={startPending}
+            disabled={isCreatingGame || startPending}
             className="btn-primary text-lg px-8 py-4 flex items-center gap-3"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -253,10 +257,10 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
               </button>
               <button
                 onClick={handleStartGame}
-                disabled={startPending || !isStakeValid}
+                disabled={isCreatingGame || startPending || !isStakeValid}
                 className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
               >
-                {startPending ? (
+                {isCreatingGame || startPending ? (
                   <LoadingSpinner />
                 ) : (
                   <>
@@ -547,16 +551,21 @@ function PlayerGameCard({
                 {formatEther(game.stake)} ETH
               </span>
             )}
-            <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-400 cursor-help" title="Move timeout">
-              ⏱ {formatTimeout(game.moveTimeout)}
+            <span className="relative group/timeout">
+              <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-400">
+                ⏱ {formatTimeout(game.moveTimeout)}
+              </span>
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-xs text-white bg-gray-900 border border-gray-700 rounded shadow-lg opacity-0 group-hover/timeout:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                Move timeout
+              </span>
             </span>
           </div>
         </div>
       </button>
 
       <div className="flex items-center gap-2">
-        {/* Cancel button for player1's waiting games */}
-        {isWaiting && isPlayer1 && (
+        {/* Cancel button for player1's waiting games (not shown if already cancelled) */}
+        {isWaiting && isPlayer1 && !isCancelled && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -666,15 +675,17 @@ function OpenGameCard({
             Free game
           </div>
         )}
-        <div
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-700 text-gray-400 cursor-help"
-          title="Move timeout"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          {formatTimeout(game.moveTimeout)}
+        <div className="relative group/timeout">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-700 text-gray-400">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            {formatTimeout(game.moveTimeout)}
+          </div>
+          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-xs text-white bg-gray-900 border border-gray-700 rounded shadow-lg opacity-0 group-hover/timeout:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            Move timeout
+          </span>
         </div>
       </div>
 

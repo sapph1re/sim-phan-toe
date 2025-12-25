@@ -20,10 +20,12 @@ import { useSponsoredWriteContract } from "./useSponsoredTransaction";
 function usePersistedMoves(gameId: bigint | undefined, playerAddress: string | undefined) {
   const [moves, setMovesInternal] = useState<LocalMove[]>([]);
 
-  // Generate a unique storage key for this game/player combination
+  // Generate a unique storage key for this game/player/contract combination
+  // Including contract address prevents stale data when contract is redeployed
   const storageKey = useMemo(() => {
-    if (gameId === undefined || !playerAddress) return null;
-    return `simphantoe-moves-${gameId.toString()}-${playerAddress.toLowerCase()}`;
+    if (gameId === undefined || !playerAddress || !SIMPHANTOE_ADDRESS) return null;
+    const contractSuffix = SIMPHANTOE_ADDRESS.slice(-8).toLowerCase();
+    return `simphantoe-moves-${contractSuffix}-${gameId.toString()}-${playerAddress.toLowerCase()}`;
   }, [gameId, playerAddress]);
 
   // Use a ref to always access the latest storageKey in the setter
