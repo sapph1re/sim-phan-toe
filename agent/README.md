@@ -11,17 +11,21 @@ This agent uses:
 - **OpenAI GPT-4** - Strategic move selection with game theory reasoning
 - **Zama FHE SDK** - Encryption/decryption for the phantom game mechanics
 - **viem** - Ethereum contract interactions
+- **PostgreSQL** - Persistent state tracking across restarts
 
 ### Key Features
 
 - **Multi-game orchestration** - Manages multiple games simultaneously in round-robin fashion
+- **Dual game creation** - Maintains one free game and one 0.01 ETH staked game for opponents
+- **Balance-aware** - Only creates paid games when wallet balance is sufficient
 - **Automatic timeout claims** - Detects and claims victory when opponents time out
-- **Persistent state** - SQLite database tracks game state across restarts
+- **Persistent state** - PostgreSQL database tracks game state across restarts
 - **Event-driven** - WebSocket subscriptions with polling fallback for real-time updates
 
 ## Prerequisites
 
 - Node.js v20+ (v22+ recommended for FHE SDK)
+- PostgreSQL database
 - Sepolia ETH for gas fees
 - OpenAI API key
 - Sepolia RPC URL (Alchemy, Infura, etc.)
@@ -40,69 +44,61 @@ npm install
 cp .env.example .env
 ```
 
-Required environment variables:
+### Environment Variables
 
-- `OPENAI_API_KEY` - Your OpenAI API key
-- `PRIVATE_KEY` - Agent wallet private key (with Sepolia ETH)
-- `SIMPHANTOE_ADDRESS` - Contract address (default: `0xF72E2d02476cAcbcE01c164da33858C49Fa55036`)
-- `SEPOLIA_RPC_URL` - Sepolia RPC endpoint
+**Required:**
 
-Optional:
+| Variable             | Description                                                              |
+| -------------------- | ------------------------------------------------------------------------ |
+| `OPENAI_API_KEY`     | Your OpenAI API key                                                      |
+| `PRIVATE_KEY`        | Agent wallet private key (with Sepolia ETH)                              |
+| `SIMPHANTOE_ADDRESS` | Contract address (default: `0xF72E2d02476cAcbcE01c164da33858C49Fa55036`) |
+| `SEPOLIA_RPC_URL`    | Sepolia RPC endpoint                                                     |
+| `POSTGRES_HOST`      | PostgreSQL host                                                          |
+| `POSTGRES_PORT`      | PostgreSQL port (default: 5432)                                          |
+| `POSTGRES_DATABASE`  | Database name                                                            |
+| `POSTGRES_USER`      | Database user                                                            |
+| `POSTGRES_PASSWORD`  | Database password                                                        |
 
-- `POLL_INTERVAL` - Polling interval in ms (default: 5000)
-- `LOG_LEVEL` - Log level: debug, info, warn, error (default: info)
+**Optional:**
+
+| Variable         | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| `OPENAI_MODEL`   | Model to use (default: `gpt-4-turbo-preview`)                         |
+| `SEPOLIA_WS_URL` | WebSocket URL for real-time events (auto-derived from RPC if not set) |
+| `LOG_LEVEL`      | Log level: `debug`, `info`, `warn`, `error` (default: `info`)         |
+
+3. Initialize the database:
+
+```bash
+npm run db-init
+```
 
 ## Usage
 
-### Commands
+Run the orchestrator:
 
 ```bash
-# Auto mode - resume active game or create new one (RECOMMENDED)
-npx tsx src/index.ts auto
+# Development (with hot reload)
+npm run dev
 
-# Resume an active game (auto-detects which game to continue)
-npx tsx src/index.ts resume
-
-# Show agent wallet address
-npx tsx src/index.ts wallet
-
-# Check agent's ETH balance
-npx tsx src/index.ts balance
-
-# List your games
-npx tsx src/index.ts list-games
-
-# Check game status
-npx tsx src/index.ts status <gameId>
-
-# Find and join an open game
-npx tsx src/index.ts find-game
-
-# Join a specific game by ID
-npx tsx src/index.ts join-game <gameId>
-
-# Create a new game and wait for opponent
-npx tsx src/index.ts create-game
-
-# Resume playing a specific game by ID
-npx tsx src/index.ts play <gameId>
+# Production
+npm start
 ```
 
-### Example Session
+The orchestrator will:
 
-```bash
-# Terminal 1: Create a game as the agent
-npx tsx src/index.ts create-game
-
-# Terminal 2 (or another player): Join the game
-# The agent will automatically play once an opponent joins
-```
+- Sync existing games from the blockchain
+- Create and maintain open games for new opponents
+- Process all active games in round-robin fashion
+- Automatically claim timeouts when opponents are inactive
 
 ## Architecture
 
 ```
 src/
 ├── index.ts           # CLI entry point
+├── orchestrator.ts    # Multi-game orchestrator
 ├── graph.ts           # LangGraph state machine
 ├── state.ts           # State types and annotations
 ├── nodes/             # Graph node implementations
@@ -113,8 +109,12 @@ src/
 │   ├── finalizeGameState.ts
 │   ├── revealBoard.ts
 │   └── waitForOpponent.ts
+├── persistence/       # Database layer
+│   ├── db.ts          # PostgreSQL connection
+│   └── gameStore.ts   # Game state CRUD operations
 ├── services/
 │   ├── contract.ts    # Contract interactions
+│   ├── events.ts      # Event watching (WebSocket + polling)
 │   └── fhe.ts         # FHE encryption/decryption
 └── utils/
     ├── logger.ts      # Structured logging
@@ -124,14 +124,14 @@ src/
 ## Game Flow
 
 1. **Idle** → Agent is assigned a game
-2. **WaitingForOpponent** → Polling until player 2 joins
+2. **WaitingForOpponent** → Waiting for player 2 to join
 3. **SelectingMove** → GPT-4 chooses optimal cell
 4. **SubmittingMove** → Encrypt and submit move
 5. **FinalizingMove** → Decrypt validity, finalize on-chain
-6. **WaitingForOpponentMove** → Polling for opponent (monitors timeout)
+6. **WaitingForOpponentMove** → Waiting for opponent (monitors timeout)
 7. **FinalizingGameState** → Decrypt winner/collision
 8. **RevealingBoard** → Decrypt and reveal final board (if game over)
-9. **GameComplete** → Display results
+9. **GameComplete** → Game finished
 
 ### Timeout Handling
 
@@ -145,19 +145,19 @@ The agent automatically monitors move timeouts:
 
 The agent uses GPT-4 to make strategic decisions:
 
-- Tracks its own moves (opponent moves are hidden)
-- Considers center and corner positions
+- Tracks its own moves (opponent moves are hidden in phantom mode)
+- Considers center and corner positions as strategically valuable
 - Avoids predictable patterns to reduce collisions
 - Adapts strategy based on collision history
 
-### Staking Behavior
+### Game Creation Behavior
 
-The agent currently:
+The orchestrator maintains two open games:
 
-- Creates games with **no stake** (free games)
-- Uses **24-hour move timeout** for created games
-- Does **not** join games that require stakes
-- Claims timeout victories automatically when opponents are inactive
+- **Free game** (no stake) - Always available
+- **Paid game** (0.01 ETH stake) - Created when wallet balance ≥ 0.015 ETH
+
+Both games use a **24-hour move timeout**.
 
 ## Development
 
@@ -169,7 +169,7 @@ npx tsc --noEmit
 npm run build
 
 # Run with debug logging
-LOG_LEVEL=debug npx tsx src/index.ts play <gameId>
+LOG_LEVEL=debug npm run dev
 ```
 
 ## License
