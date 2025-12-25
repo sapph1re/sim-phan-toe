@@ -1,7 +1,7 @@
-import { useReadContract, useWatchContractEvent, useAccount, usePublicClient } from "wagmi";
+import { useReadContract, useWatchContractEvent, useAccount, usePublicClient, useBalance } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
-import { toHex } from "viem";
+import { toHex, formatEther, parseEther } from "viem";
 import {
   SIMPHANTOE_ABI,
   SIMPHANTOE_ADDRESS,
@@ -73,6 +73,61 @@ export function useContractAddress() {
   const address = SIMPHANTOE_ADDRESS;
   const isValid = address && address.startsWith("0x") && address.length === 42;
   return { address: isValid ? address : undefined, isConfigured: isValid };
+}
+
+// Minimum ETH to reserve for gas when staking
+export const MIN_GAS_RESERVE = parseEther("0.01");
+
+// Hook to get user's ETH balance with real-time updates
+export function useUserBalance() {
+  const { address } = useAccount();
+  const balanceResult = useBalance({
+    address,
+    query: {
+      enabled: !!address,
+      refetchInterval: 10000, // Refetch every 10 seconds
+    },
+  });
+
+  // Compute derived values
+  const balance = balanceResult.data?.value ?? 0n;
+  const formattedBalance = balanceResult.data ? formatEther(balanceResult.data.value) : "0";
+
+  // Calculate max stake (balance minus gas reserve)
+  const maxStake = balance > MIN_GAS_RESERVE ? balance - MIN_GAS_RESERVE : 0n;
+
+  // Helper to check if user can afford a stake amount
+  const canAffordStake = useCallback(
+    (stake: bigint) => {
+      return balance >= stake + MIN_GAS_RESERVE;
+    },
+    [balance],
+  );
+
+  // Format balance for display (compact)
+  const displayBalance = useMemo(() => {
+    if (!balanceResult.data) return "0 ETH";
+    const value = balanceResult.data.value;
+    if (value === 0n) return "0 ETH";
+    if (value < parseEther("0.001")) return "<0.001 ETH";
+    if (value < parseEther("0.01")) return "<0.01 ETH";
+    // Format with up to 4 decimal places, trim trailing zeros
+    const formatted = parseFloat(formatEther(value))
+      .toFixed(4)
+      .replace(/\.?0+$/, "");
+    return `${formatted} ETH`;
+  }, [balanceResult.data]);
+
+  return {
+    ...balanceResult,
+    balance,
+    formattedBalance,
+    displayBalance,
+    maxStake,
+    canAffordStake,
+    hasBalance: balance > 0n,
+    hasSufficientGas: balance >= MIN_GAS_RESERVE,
+  };
 }
 
 // Hook to get the total game count

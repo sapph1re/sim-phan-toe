@@ -4,6 +4,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { AuthModal } from "./AuthModal";
 import { isPrivyConfigured } from "../lib/privy";
+import { useUserBalance } from "../hooks/useSimPhanToe";
 
 // Format address for display (0x1234...5678)
 function formatAddress(address: string): string {
@@ -18,6 +19,9 @@ export function AuthButton() {
   // Wagmi hooks for wallet state
   const { address, isConnected } = useAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
+  
+  // Get user balance
+  const { displayBalance, formattedBalance, isLoading: balanceLoading } = useUserBalance();
 
   // Privy hooks - only use when configured
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -133,10 +137,17 @@ export function AuthButton() {
             </div>
           )}
           
-          {/* Address */}
+          {/* Address and Balance */}
           <span className="text-white font-medium">
             {activeAddress ? formatAddress(activeAddress) : "Connected"}
           </span>
+          
+          {/* Balance display */}
+          {activeAddress && (
+            <span className="text-cyber-cyan text-sm font-mono">
+              {balanceLoading ? "..." : displayBalance}
+            </span>
+          )}
         </div>
 
         {/* Dropdown arrow */}
@@ -163,6 +174,10 @@ export function AuthButton() {
             )}
             <p className="text-xs text-gray-500 font-mono">
               {activeAddress}
+            </p>
+            {/* Balance in dropdown */}
+            <p className="text-sm text-cyber-cyan font-mono mt-1">
+              {balanceLoading ? "Loading..." : `${formattedBalance} ETH`}
             </p>
             {isEmbedded && (
               <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-cyber-purple/20 text-cyber-purple text-xs rounded">

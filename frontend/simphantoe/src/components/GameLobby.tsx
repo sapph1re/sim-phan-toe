@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAccount } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
 import { 
@@ -8,7 +8,9 @@ import {
   useJoinGame,
   useCancelGame,
   useGame,
-  useGameCount
+  useGameCount,
+  useUserBalance,
+  MIN_GAS_RESERVE
 } from '../hooks/useSimPhanToe'
 import { Winner, isGameFinished, isGameCancelled } from '../lib/contracts'
 
@@ -33,16 +35,32 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
   const { startGame, isPending: startPending } = useStartGame()
   const { joinGame, isPending: joinPending } = useJoinGame()
   const { cancelGame, isPending: cancelPending } = useCancelGame()
+  
+  // User balance for validation
+  const { balance, displayBalance, maxStake, canAffordStake, hasSufficientGas } = useUserBalance()
 
   // New game form state
   const [showNewGameForm, setShowNewGameForm] = useState(false)
   const [stakeInput, setStakeInput] = useState('')
   const [selectedTimeout, setSelectedTimeout] = useState(TIMEOUT_OPTIONS[2].value) // Default 24h
+  
+  // Parse stake input and calculate validation
+  const stakeWei = useMemo(() => {
+    try {
+      return stakeInput ? parseEther(stakeInput) : 0n
+    } catch {
+      return 0n
+    }
+  }, [stakeInput])
+  
+  const canAffordCurrentStake = canAffordStake(stakeWei)
+  const isStakeValid = stakeWei >= 0n && canAffordCurrentStake
+  const showStakeWarning = stakeInput && stakeWei > 0n && !canAffordCurrentStake
 
   const handleStartGame = async () => {
     try {
-      const stakeWei = stakeInput ? parseEther(stakeInput) : 0n
-      await startGame(selectedTimeout, stakeWei)
+      const stake = stakeInput ? parseEther(stakeInput) : 0n
+      await startGame(selectedTimeout, stake)
       setShowNewGameForm(false)
       setStakeInput('')
     } catch (error) {
@@ -148,10 +166,15 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
             
             {/* Stake Input */}
             <div className="mb-4">
-              <label className="block text-sm text-gray-400 mb-2">
-                Stake Amount (ETH)
-                <span className="text-gray-600 ml-2">Optional</span>
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-gray-400">
+                  Stake Amount (ETH)
+                  <span className="text-gray-600 ml-2">Optional</span>
+                </label>
+                <span className="text-xs text-gray-500">
+                  Balance: <span className="text-cyber-cyan">{displayBalance}</span>
+                </span>
+              </div>
               <div className="relative">
                 <input
                   type="number"
@@ -160,13 +183,38 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
                   placeholder="0.0"
                   value={stakeInput}
                   onChange={(e) => setStakeInput(e.target.value)}
-                  className="w-full bg-cyber-darker border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-cyber-purple focus:outline-none"
+                  disabled={!hasSufficientGas}
+                  className={`w-full bg-cyber-darker border rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none ${
+                    showStakeWarning 
+                      ? 'border-red-500 focus:border-red-500' 
+                      : 'border-gray-700 focus:border-cyber-purple'
+                  } ${!hasSufficientGas ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">ETH</span>
               </div>
-              <p className="text-xs text-gray-600 mt-1">
-                Opponent must match this stake to join. Winner takes all!
-              </p>
+              {showStakeWarning ? (
+                <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  Insufficient balance. Max stake: {formatEther(maxStake)} ETH
+                </p>
+              ) : !hasSufficientGas ? (
+                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  Need at least {formatEther(MIN_GAS_RESERVE)} ETH for gas. Top up your wallet to play.
+                </p>
+              ) : (
+                <p className="text-xs text-gray-600 mt-1">
+                  Opponent must match this stake to join. Winner takes all!
+                </p>
+              )}
             </div>
 
             {/* Timeout Selection */}
@@ -204,7 +252,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
               </button>
               <button
                 onClick={handleStartGame}
-                disabled={startPending}
+                disabled={startPending || !isStakeValid || !hasSufficientGas}
                 className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"
               >
                 {startPending ? (
@@ -215,7 +263,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    Create Game
+                    {stakeWei > 0n ? `Create (${stakeInput} ETH)` : 'Create Game'}
                   </>
                 )}
               </button>
@@ -286,6 +334,7 @@ export function GameLobby({ onSelectGame }: GameLobbyProps) {
                   gameId={gameId}
                   onJoin={(stake) => handleJoinGame(gameId, stake)}
                   isJoining={joinPending}
+                  userBalance={balance}
                 />
               ))}
             </div>
@@ -490,13 +539,28 @@ function PlayerGameCard({
   )
 }
 
-function OpenGameCard({ gameId, onJoin, isJoining }: { gameId: bigint; onJoin: (stake: bigint) => void; isJoining: boolean }) {
+function OpenGameCard({ 
+  gameId, 
+  onJoin, 
+  isJoining,
+  userBalance 
+}: { 
+  gameId: bigint
+  onJoin: (stake: bigint) => void
+  isJoining: boolean
+  userBalance: bigint
+}) {
   const { data: game } = useGame(gameId)
 
   if (!game) return null
 
   const shortenAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
   const hasStake = game.stake > 0n
+  
+  // Calculate if user can afford to join
+  const requiredAmount = game.stake + MIN_GAS_RESERVE
+  const canAffordToJoin = userBalance >= requiredAmount
+  const shortfall = requiredAmount - userBalance
 
   // Format timeout for display
   const formatTimeout = (seconds: bigint) => {
@@ -551,13 +615,35 @@ function OpenGameCard({ gameId, onJoin, isJoining }: { gameId: bigint; onJoin: (
         </div>
       </div>
 
+      {/* Insufficient funds warning */}
+      {!canAffordToJoin && (
+        <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+          <p className="text-xs text-red-400 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            {hasStake ? (
+              <>Need {formatEther(shortfall)} more ETH ({formatEther(game.stake)} stake + gas)</>
+            ) : (
+              <>Need {formatEther(shortfall)} more ETH for gas</>
+            )}
+          </p>
+        </div>
+      )}
+
       <button
         onClick={() => onJoin(game.stake)}
-        disabled={isJoining}
-        className="w-full btn-secondary text-sm py-2.5 flex items-center justify-center gap-2"
+        disabled={isJoining || !canAffordToJoin}
+        className={`w-full text-sm py-2.5 flex items-center justify-center gap-2 ${
+          canAffordToJoin ? 'btn-secondary' : 'btn-secondary opacity-50 cursor-not-allowed'
+        }`}
       >
         {isJoining ? (
           <LoadingSpinner />
+        ) : !canAffordToJoin ? (
+          'Insufficient Balance'
         ) : hasStake ? (
           <>
             Join with {formatEther(game.stake)} ETH

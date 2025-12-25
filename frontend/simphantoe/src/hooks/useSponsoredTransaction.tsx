@@ -167,8 +167,12 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
       };
 
       try {
-        if (hasPrivyEmbeddedWallet) {
+        // Check if transaction includes ETH value - sponsorship doesn't support payable transactions
+        const hasEthValue = value !== undefined && value > 0n;
+
+        if (hasPrivyEmbeddedWallet && !hasEthValue) {
           // Use Privy's sendTransaction for gas sponsorship with retry logic
+          // Only for non-payable transactions (value = 0)
           console.log("[SponsoredTx] Using Privy sendTransaction for gas sponsorship");
           console.log("[SponsoredTx] Function:", functionName);
           console.log("[SponsoredTx] Args:", args);
@@ -212,7 +216,6 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
                   to: address,
                   data,
                   chainId: 11155111, // Sepolia
-                  value: value ? `0x${value.toString(16)}` : undefined,
                 },
                 {
                   // Enable gas sponsorship - Privy will pay gas fees from your credits
@@ -261,6 +264,32 @@ export function useSponsoredWriteContract(): UseSponsoredWriteContractReturn {
 
           // If we get here, all retries failed
           throw lastError;
+        } else if (hasPrivyEmbeddedWallet && hasEthValue) {
+          // Payable transaction with Privy wallet - send without sponsorship
+          // Gas sponsorship doesn't support transactions that send ETH
+          console.log("[SponsoredTx] Using Privy sendTransaction WITHOUT sponsorship (payable tx)");
+          console.log("[SponsoredTx] Function:", functionName);
+          console.log("[SponsoredTx] Value:", value.toString(), "wei");
+
+          const data = encodeFunctionData({
+            abi,
+            functionName,
+            args: args as unknown[],
+          });
+
+          const txReceipt = await sendTransaction({
+            to: address,
+            data,
+            chainId: 11155111,
+            value: `0x${value.toString(16)}`,
+          });
+
+          const txHash = txReceipt.hash as `0x${string}`;
+          console.log("[SponsoredTx] Payable transaction sent via Privy (unsponsored):", txHash);
+
+          setIsSuccess(true);
+          setIsPending(false);
+          return txHash;
         } else {
           // Fallback to wagmi's writeContract (no retry logic for external wallets)
           console.log("[SponsoredTx] Using wagmi writeContract (no Privy embedded wallet)");
