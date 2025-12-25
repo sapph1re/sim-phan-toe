@@ -1128,9 +1128,6 @@ describe("SimPhanToe", function () {
       await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
       await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
 
-      // Record balances before the winning round
-      const p1BalanceBefore = await ethers.provider.getBalance(signers.player1.address);
-
       // Play game: P1 fills first row (0,0), (1,0), (2,0), (3,0)
       // P2 plays scattered positions that don't win
       await submitAndFinalizeMoves(0, 0, 0, 1);
@@ -1178,16 +1175,10 @@ describe("SimPhanToe", function () {
       const finalGame = await contract.getGame(0);
       expect(finalGame.winner).to.eq(1n); // Winner.Player1
 
-      // Verify player1 received the prize (2x stake)
-      const p1BalanceAfter = await ethers.provider.getBalance(signers.player1.address);
-      // Player1 balance should have increased by approximately 2x stake (minus gas spent on transactions)
-      // Since we started tracking before the winning round, we account for gas
-      // The key check: contract should now have 0 balance
+      // Verify prize was distributed
+      // The key check: contract should now have 0 balance (all stakes distributed)
       const contractBalance = await ethers.provider.getBalance(contractAddress);
       expect(contractBalance).to.eq(0n);
-
-      // Player1's balance should be higher than before (received 2x stake, paid gas)
-      // We can't check exact amount due to gas, but we know they got the prize
       expect(finalGame.stake).to.eq(0n); // Stake cleared after distribution
     });
 
@@ -1254,10 +1245,6 @@ describe("SimPhanToe", function () {
       await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
       await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
 
-      // Record balances before the draw
-      const p1BalanceBefore = await ethers.provider.getBalance(signers.player1.address);
-      const p2BalanceBefore = await ethers.provider.getBalance(signers.player2.address);
-
       // Play game to a draw: both players complete a line simultaneously
       // P1 fills row 0: (0,0), (1,0), (2,0), (3,0)
       // P2 fills column 0: but P1 already has (0,0), so P2 fills row 1: (0,1), (1,1), (2,1), (3,1)
@@ -1309,17 +1296,10 @@ describe("SimPhanToe", function () {
       const finalGame = await contract.getGame(0);
       expect(finalGame.winner).to.eq(3n); // Winner.Draw
 
-      // Verify contract has 0 balance (all funds distributed)
+      // Verify contract has 0 balance (all funds distributed - each player got their stake back)
       const contractBalance = await ethers.provider.getBalance(contractAddress);
       expect(contractBalance).to.eq(0n);
       expect(finalGame.stake).to.eq(0n);
-
-      // Both players should have received their stake back
-      const p1BalanceAfter = await ethers.provider.getBalance(signers.player1.address);
-      const p2BalanceAfter = await ethers.provider.getBalance(signers.player2.address);
-
-      // Due to gas costs from earlier moves, we just verify contract is empty
-      // and that balances didn't decrease more than gas costs would explain
     });
 
     it("should not distribute prizes on collision (game continues)", async function () {

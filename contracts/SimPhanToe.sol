@@ -98,7 +98,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     /// @param _moveTimeout Time limit for each move (between MIN_TIMEOUT and MAX_TIMEOUT)
     /// @dev Initializes Game with player 1 and empty board. Send ETH to set the stake.
     function startGame(uint256 _moveTimeout) external payable {
-        require(_moveTimeout >= MIN_TIMEOUT && _moveTimeout <= MAX_TIMEOUT, "Invalid timeout.");
+        require(_moveTimeout > MIN_TIMEOUT - 1 && _moveTimeout < MAX_TIMEOUT + 1, "Invalid timeout.");
         Game memory game = Game({
             gameId: gameCount,
             player1: msg.sender,
