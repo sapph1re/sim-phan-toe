@@ -1,13 +1,16 @@
 import { SimPhanToe, SimPhanToe__factory } from "../types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers, fhevm } from "hardhat";
+import { ethers, fhevm, network } from "hardhat";
 
 type Signers = {
   deployer: HardhatEthersSigner;
   player1: HardhatEthersSigner;
   player2: HardhatEthersSigner;
 };
+
+// Default timeout for tests (1 hour in seconds)
+const DEFAULT_TIMEOUT = 3600n;
 
 async function deployFixture() {
   const factory = (await ethers.getContractFactory("SimPhanToe")) as SimPhanToe__factory;
@@ -48,7 +51,7 @@ describe("SimPhanToe", function () {
 
   describe("Game Creation", function () {
     it("should allow a player to start a new game", async function () {
-      const tx = await contract.connect(signers.player1).startGame();
+      const tx = await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await tx.wait();
 
       const gameCount = await contract.gameCount();
@@ -56,13 +59,13 @@ describe("SimPhanToe", function () {
     });
 
     it("should emit GameStarted event when starting a game", async function () {
-      await expect(contract.connect(signers.player1).startGame())
+      await expect(contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT))
         .to.emit(contract, "GameStarted")
-        .withArgs(0n, signers.player1.address);
+        .withArgs(0n, signers.player1.address, 0n, DEFAULT_TIMEOUT);
     });
 
     it("should add the game to open games list", async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
 
       const openGames = await contract.getOpenGames();
       expect(openGames.length).to.eq(1);
@@ -70,7 +73,7 @@ describe("SimPhanToe", function () {
     });
 
     it("should track games by player", async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
 
       const playerGames = await contract.getGamesByPlayer(signers.player1.address);
       expect(playerGames.length).to.eq(1);
@@ -78,7 +81,7 @@ describe("SimPhanToe", function () {
     });
 
     it("should set player1 correctly in the game", async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
 
       const game = await contract.getGame(0);
       expect(game.player1).to.eq(signers.player1.address);
@@ -92,7 +95,7 @@ describe("SimPhanToe", function () {
   describe("Game Join", function () {
     beforeEach(async function () {
       // Create a game for player 1
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
     });
 
     it("should allow player2 to join an open game", async function () {
@@ -140,7 +143,7 @@ describe("SimPhanToe", function () {
   describe("Move Submission", function () {
     beforeEach(async function () {
       // Create and join a game
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await contract.connect(signers.player2).joinGame(0);
     });
 
@@ -246,7 +249,7 @@ describe("SimPhanToe", function () {
   describe("Move Finalization", function () {
     beforeEach(async function () {
       // Create and join a game
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await contract.connect(signers.player2).joinGame(0);
     });
 
@@ -303,7 +306,7 @@ describe("SimPhanToe", function () {
 
   describe("Move Processing", function () {
     beforeEach(async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await contract.connect(signers.player2).joinGame(0);
     });
 
@@ -351,7 +354,7 @@ describe("SimPhanToe", function () {
 
   describe("Collision Detection", function () {
     beforeEach(async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await contract.connect(signers.player2).joinGame(0);
     });
 
@@ -410,7 +413,7 @@ describe("SimPhanToe", function () {
     this.timeout(120000);
 
     beforeEach(async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await contract.connect(signers.player2).joinGame(0);
     });
 
@@ -704,7 +707,7 @@ describe("SimPhanToe", function () {
     this.timeout(120000);
 
     beforeEach(async function () {
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       await contract.connect(signers.player2).joinGame(0);
     });
 
@@ -879,12 +882,201 @@ describe("SimPhanToe", function () {
     });
   });
 
+  // ==================== STAKING TESTS ====================
+
+  describe("Staking", function () {
+    const STAKE_AMOUNT = ethers.parseEther("0.1");
+
+    it("should allow starting a game with stake", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      const game = await contract.getGame(0);
+      expect(game.stake).to.eq(STAKE_AMOUNT);
+    });
+
+    it("should require matching stake to join", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      await expect(contract.connect(signers.player2).joinGame(0)).to.be.revertedWith("Must match stake.");
+    });
+
+    it("should allow joining with matching stake", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
+      const game = await contract.getGame(0);
+      expect(game.player2).to.eq(signers.player2.address);
+    });
+
+    it("should reject joining with wrong stake amount", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      const wrongAmount = ethers.parseEther("0.05");
+      await expect(contract.connect(signers.player2).joinGame(0, { value: wrongAmount })).to.be.revertedWith(
+        "Must match stake.",
+      );
+    });
+
+    it("should allow zero-stake games", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
+      await contract.connect(signers.player2).joinGame(0);
+      const game = await contract.getGame(0);
+      expect(game.stake).to.eq(0n);
+      expect(game.player2).to.eq(signers.player2.address);
+    });
+  });
+
+  // ==================== CANCEL GAME TESTS ====================
+
+  describe("Cancel Game", function () {
+    const STAKE_AMOUNT = ethers.parseEther("0.1");
+
+    it("should allow player1 to cancel unjoined game", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      await expect(contract.connect(signers.player1).cancelGame(0)).to.emit(contract, "GameCancelled").withArgs(0n);
+      const game = await contract.getGame(0);
+      expect(game.winner).to.eq(4n); // Winner.Cancelled
+    });
+
+    it("should refund stake when cancelling", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      const balanceBefore = await ethers.provider.getBalance(signers.player1.address);
+      const tx = await contract.connect(signers.player1).cancelGame(0);
+      const receipt = await tx.wait();
+      const gasUsed = receipt!.gasUsed * receipt!.gasPrice;
+      const balanceAfter = await ethers.provider.getBalance(signers.player1.address);
+      expect(balanceAfter + gasUsed - balanceBefore).to.eq(STAKE_AMOUNT);
+    });
+
+    it("should not allow non-player1 to cancel", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      await expect(contract.connect(signers.player2).cancelGame(0)).to.be.revertedWith("Only player1 can cancel.");
+    });
+
+    it("should not allow cancelling after player2 joins", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT, { value: STAKE_AMOUNT });
+      await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
+      await expect(contract.connect(signers.player1).cancelGame(0)).to.be.revertedWith("Game already has player2.");
+    });
+
+    it("should remove cancelled game from open games list", async function () {
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
+      let openGames = await contract.getOpenGames();
+      expect(openGames.length).to.eq(1);
+      await contract.connect(signers.player1).cancelGame(0);
+      openGames = await contract.getOpenGames();
+      expect(openGames.length).to.eq(0);
+    });
+  });
+
+  // ==================== TIMEOUT TESTS ====================
+
+  describe("Timeout", function () {
+    const STAKE_AMOUNT = ethers.parseEther("0.1");
+    const SHORT_TIMEOUT = 3600n; // 1 hour
+
+    it("should not allow timeout claim before deadline", async function () {
+      await contract.connect(signers.player1).startGame(SHORT_TIMEOUT, { value: STAKE_AMOUNT });
+      await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
+      await expect(contract.connect(signers.player1).claimTimeout(0)).to.be.revertedWith("Timeout not reached.");
+    });
+
+    it("should allow timeout claim after deadline when opponent hasn't moved", async function () {
+      await contract.connect(signers.player1).startGame(SHORT_TIMEOUT, { value: STAKE_AMOUNT });
+      await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
+
+      // Player 1 submits and finalizes their move
+      const encryptedMove = await fhevm
+        .createEncryptedInput(contractAddress, signers.player1.address)
+        .add8(0)
+        .add8(0)
+        .encrypt();
+      await contract
+        .connect(signers.player1)
+        .submitMove(0, encryptedMove.handles[0], encryptedMove.handles[1], encryptedMove.inputProof);
+      const [move1] = await contract.getMoves(0);
+      const { clearValues, decryptionProof } = await fhevm.publicDecrypt([move1.isInvalid]);
+      const isInvalid = clearValues[move1.isInvalid as `0x${string}`] as boolean;
+      await contract.finalizeMove(0, signers.player1.address, isInvalid, decryptionProof);
+
+      // Fast forward time past timeout
+      await network.provider.send("evm_increaseTime", [Number(SHORT_TIMEOUT) + 1]);
+      await network.provider.send("evm_mine");
+
+      // Player 1 claims timeout
+      await expect(contract.connect(signers.player1).claimTimeout(0))
+        .to.emit(contract, "GameTimeout")
+        .withArgs(0n, signers.player1.address);
+
+      const game = await contract.getGame(0);
+      expect(game.winner).to.eq(1n); // Winner.Player1
+    });
+
+    it("should give prize to winner on timeout", async function () {
+      await contract.connect(signers.player1).startGame(SHORT_TIMEOUT, { value: STAKE_AMOUNT });
+      await contract.connect(signers.player2).joinGame(0, { value: STAKE_AMOUNT });
+
+      // Player 1 submits and finalizes their move
+      const encryptedMove = await fhevm
+        .createEncryptedInput(contractAddress, signers.player1.address)
+        .add8(0)
+        .add8(0)
+        .encrypt();
+      await contract
+        .connect(signers.player1)
+        .submitMove(0, encryptedMove.handles[0], encryptedMove.handles[1], encryptedMove.inputProof);
+      const [move1] = await contract.getMoves(0);
+      const { clearValues, decryptionProof } = await fhevm.publicDecrypt([move1.isInvalid]);
+      const isInvalid = clearValues[move1.isInvalid as `0x${string}`] as boolean;
+      await contract.finalizeMove(0, signers.player1.address, isInvalid, decryptionProof);
+
+      // Fast forward time past timeout
+      await network.provider.send("evm_increaseTime", [Number(SHORT_TIMEOUT) + 1]);
+      await network.provider.send("evm_mine");
+
+      // Check balance before and after
+      const balanceBefore = await ethers.provider.getBalance(signers.player1.address);
+      const tx = await contract.connect(signers.player1).claimTimeout(0);
+      const receipt = await tx.wait();
+      const gasUsed = receipt!.gasUsed * receipt!.gasPrice;
+      const balanceAfter = await ethers.provider.getBalance(signers.player1.address);
+
+      // Player 1 should receive 2x stake (minus gas)
+      const expectedPrize = STAKE_AMOUNT * 2n;
+      expect(balanceAfter + gasUsed - balanceBefore).to.eq(expectedPrize);
+    });
+  });
+
+  // ==================== TIMEOUT VALIDATION TESTS ====================
+
+  describe("Timeout Validation", function () {
+    it("should reject timeout below minimum", async function () {
+      const tooShort = 60n; // 1 minute
+      await expect(contract.connect(signers.player1).startGame(tooShort)).to.be.revertedWith("Invalid timeout.");
+    });
+
+    it("should reject timeout above maximum", async function () {
+      const tooLong = 8n * 24n * 60n * 60n; // 8 days in seconds
+      await expect(contract.connect(signers.player1).startGame(tooLong)).to.be.revertedWith("Invalid timeout.");
+    });
+
+    it("should accept timeout at minimum boundary", async function () {
+      const minTimeout = 3600n; // 1 hour
+      await contract.connect(signers.player1).startGame(minTimeout);
+      const game = await contract.getGame(0);
+      expect(game.moveTimeout).to.eq(minTimeout);
+    });
+
+    it("should accept timeout at maximum boundary", async function () {
+      const maxTimeout = 7n * 24n * 60n * 60n; // 7 days in seconds
+      await contract.connect(signers.player1).startGame(maxTimeout);
+      const game = await contract.getGame(0);
+      expect(game.moveTimeout).to.eq(maxTimeout);
+    });
+  });
+
   // ==================== INTEGRATION TEST ====================
 
   describe("Full Game Flow", function () {
     it("should complete a full game from start to finish", async function () {
       // 1. Start game
-      await contract.connect(signers.player1).startGame();
+      await contract.connect(signers.player1).startGame(DEFAULT_TIMEOUT);
       expect(await contract.gameCount()).to.eq(1n);
 
       // 2. Join game
