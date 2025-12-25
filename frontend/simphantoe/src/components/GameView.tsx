@@ -61,7 +61,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
   const [isPendingSubmit, setIsPendingSubmit] = useState(false);
   const [currentTime, setCurrentTime] = useState(Math.floor(Date.now() / 1000));
   const [localPayoutTxHash, setLocalPayoutTxHash] = useState<`0x${string}` | null>(null);
-  
+
   // Use either the local payout tx (from timeout claim) or the one from game flow (from regular finalization)
   const payoutTxHash = localPayoutTxHash ?? gameFlowPayoutTxHash;
 
@@ -310,9 +310,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
             <span className="text-3xl">✕</span>
             <div className="text-center">
               <h3 className="font-display text-xl font-bold text-gray-400">Game Cancelled</h3>
-              <p className="text-sm text-gray-500">
-                This game was cancelled before it started.
-              </p>
+              <p className="text-sm text-gray-500">This game was cancelled before it started.</p>
               {game.stake > 0n && isPlayer1 && (
                 <p className="text-sm text-green-400 mt-1">
                   Your stake of {formatEther(game.stake)} ETH has been refunded.
@@ -354,11 +352,13 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
               {/* Payout info */}
               {game.stake > 0n && (
                 <div className="mt-2 pt-2 border-t border-white/10">
-                  <p className={`text-sm font-medium ${
-                    userResult === "won" ? "text-green-400" : userResult === "lost" ? "text-red-400" : "text-gray-400"
-                  }`}>
-                    {userResult === "won" 
-                      ? `+${formatEther(game.stake * 2n)} ETH collected` 
+                  <p
+                    className={`text-sm font-medium ${
+                      userResult === "won" ? "text-green-400" : userResult === "lost" ? "text-red-400" : "text-gray-400"
+                    }`}
+                  >
+                    {userResult === "won"
+                      ? `+${formatEther(game.stake * 2n)} ETH collected`
                       : userResult === "lost"
                         ? `-${formatEther(game.stake)} ETH`
                         : `${formatEther(game.stake)} ETH returned`}
@@ -526,24 +526,46 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
 
           {/* Timeout Countdown - shown during active game */}
           {!isGameOver && !waitingForOpponent && game.lastActionTimestamp > 0n && (
-            <div className={`glass p-4 ${timeoutInfo.isExpired ? 'bg-red-500/20 border-red-500/30' : ''}`}>
+            <div className={`glass p-4 ${timeoutInfo.isExpired ? "bg-red-500/20 border-red-500/30" : ""}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    timeoutInfo.isExpired ? 'bg-red-500/20' : timeoutInfo.remaining < 3600 ? 'bg-yellow-500/20' : 'bg-gray-700'
-                  }`}>
-                    <svg className={`w-5 h-5 ${
-                      timeoutInfo.isExpired ? 'text-red-500' : timeoutInfo.remaining < 3600 ? 'text-yellow-500 animate-pulse' : 'text-gray-400'
-                    }`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      timeoutInfo.isExpired
+                        ? "bg-red-500/20"
+                        : timeoutInfo.remaining < 3600
+                          ? "bg-yellow-500/20"
+                          : "bg-gray-700"
+                    }`}
+                  >
+                    <svg
+                      className={`w-5 h-5 ${
+                        timeoutInfo.isExpired
+                          ? "text-red-500"
+                          : timeoutInfo.remaining < 3600
+                            ? "text-yellow-500 animate-pulse"
+                            : "text-gray-400"
+                      }`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <polyline points="12 6 12 12 16 14" />
                     </svg>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Move Deadline</p>
-                    <p className={`font-display font-bold ${
-                      timeoutInfo.isExpired ? 'text-red-500' : timeoutInfo.remaining < 3600 ? 'text-yellow-500' : 'text-white'
-                    }`}>
+                    <p
+                      className={`font-display font-bold ${
+                        timeoutInfo.isExpired
+                          ? "text-red-500"
+                          : timeoutInfo.remaining < 3600
+                            ? "text-yellow-500"
+                            : "text-white"
+                      }`}
+                    >
                       {formatRemainingTime(timeoutInfo.remaining)}
                     </p>
                   </div>
@@ -554,7 +576,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                     disabled={isClaimingTimeout}
                     className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 rounded-lg font-medium transition-colors"
                   >
-                    {isClaimingTimeout ? 'Claiming...' : 'Claim Victory'}
+                    {isClaimingTimeout ? "Claiming..." : "Claim Victory"}
                   </button>
                 )}
               </div>
@@ -567,7 +589,13 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      className="w-5 h-5 text-yellow-500"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <path d="M12 6v6l4 2" />
                     </svg>
@@ -575,9 +603,9 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                   <div>
                     <p className="font-medium text-yellow-500">Waiting for opponent</p>
                     <p className="text-xs text-gray-500">
-                      {game.stake > 0n 
-                        ? `${formatEther(game.stake)} ETH staked — will be refunded if cancelled` 
-                        : 'Cancel anytime before someone joins'}
+                      {game.stake > 0n
+                        ? `${formatEther(game.stake)} ETH staked — will be refunded if cancelled`
+                        : "Cancel anytime before someone joins"}
                     </p>
                   </div>
                 </div>
@@ -586,7 +614,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                   disabled={isCancelling}
                   className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-lg font-medium transition-colors"
                 >
-                  {isCancelling ? 'Cancelling...' : 'Cancel Game'}
+                  {isCancelling ? "Cancelling..." : "Cancel Game"}
                 </button>
               </div>
             </div>
@@ -611,7 +639,13 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                 <span className={game.stake > 0n ? "text-yellow-500 font-semibold" : "text-gray-500"}>
                   {game.stake > 0n ? (
                     <span className="flex items-center gap-1.5">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        className="w-3.5 h-3.5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <circle cx="12" cy="12" r="10" />
                         <path d="M12 6v12M8 10h8M8 14h8" />
                       </svg>
@@ -645,7 +679,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
-                  {Number(game.moveTimeout) >= 86400 
+                  {Number(game.moveTimeout) >= 86400
                     ? `${Math.round(Number(game.moveTimeout) / 86400)} days`
                     : `${Math.round(Number(game.moveTimeout) / 3600)} hours`}
                 </span>
@@ -723,9 +757,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                       <span className="ml-1 text-green-500">Winner!</span>
                     )}
                   </p>
-                  <p className="font-mono text-sm truncate">
-                    {isAgentAddress(game.player1) ? "Agent" : game.player1}
-                  </p>
+                  <p className="font-mono text-sm truncate">{game.player1}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -763,9 +795,7 @@ export function GameView({ gameId, onBack, isJoining, onJoinComplete }: GameView
                       <span className="ml-1 text-green-500">Winner!</span>
                     )}
                   </p>
-                  <p className="font-mono text-sm truncate">
-                    {waitingForOpponent ? "Waiting..." : isAgentAddress(game.player2) ? "Agent" : game.player2}
-                  </p>
+                  <p className="font-mono text-sm truncate">{waitingForOpponent ? "Waiting..." : game.player2}</p>
                 </div>
               </div>
             </div>

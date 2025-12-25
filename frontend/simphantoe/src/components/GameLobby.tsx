@@ -547,7 +547,7 @@ function PlayerGameCard({
                 {formatEther(game.stake)} ETH
               </span>
             )}
-            <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-400">
+            <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-400 cursor-help" title="Move timeout">
               ⏱ {formatTimeout(game.moveTimeout)}
             </span>
           </div>
@@ -646,9 +646,7 @@ function OpenGameCard({
                 </span>
               )}
             </p>
-            <p className="text-sm text-gray-500">
-              Created by {creatorIsAgent ? "Agent" : shortenAddress(game.player1)}
-            </p>
+            <p className="text-sm text-gray-500">Created by {shortenAddress(game.player1)}</p>
           </div>
         </div>
       </div>
@@ -668,7 +666,10 @@ function OpenGameCard({
             Free game
           </div>
         )}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-700 text-gray-400">
+        <div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-700 text-gray-400 cursor-help"
+          title="Move timeout"
+        >
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
