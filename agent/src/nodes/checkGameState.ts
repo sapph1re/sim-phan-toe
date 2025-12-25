@@ -17,7 +17,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
     };
   }
 
-  logger.info("Checking game state", { gameId: gameId.toString() });
+  logger.debug("Checking game state", { gameId: gameId.toString() });
 
   try {
     const contract = getContractService();
@@ -114,7 +114,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
 
     // 2. Waiting for player 2 to join
     if (game.player2 === ZERO_ADDRESS) {
-      logger.info("Waiting for opponent to join");
+      logger.debug("Waiting for opponent to join");
       return {
         ...baseUpdate,
         currentPhase: GamePhase.WaitingForOpponent,
@@ -180,7 +180,7 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
         }
       }
 
-      logger.info("Waiting for opponent's move", {
+      logger.debug("Waiting for opponent's move", {
         timeRemaining: Number(timeoutDeadline - currentTimestamp),
       });
       return {
