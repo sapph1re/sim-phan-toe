@@ -165,8 +165,8 @@ export async function selectMove(state: AgentState): Promise<Partial<AgentState>
       }
     }
 
-    logger.info("AI selected move", { 
-      x: selectedMove.x, 
+    logger.info("AI selected move", {
+      x: selectedMove.x,
       y: selectedMove.y,
       round: currentRound + 1,
     });
