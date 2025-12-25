@@ -19,6 +19,9 @@ contract SimPhanToe is ZamaEthereumConfig {
         ebool eCollision; // encrypted flag indicating if the latest moves collided
         Cell[4][4] board; // the board is decrypted when the game finishes
         Winner winner; // decrypted winner, for convenience when UI is checking the game state
+        uint256 stake; // ETH stake for the game (each player puts this amount)
+        uint256 moveTimeout; // time limit for making moves
+        uint256 lastActionTimestamp; // timestamp of last action requiring a response
     }
 
     struct Move {
@@ -40,8 +43,13 @@ contract SimPhanToe is ZamaEthereumConfig {
         None,
         Player1,
         Player2,
-        Draw
+        Draw,
+        Cancelled // plaintext only, never used in FHE
     }
+
+    // Timeout constants
+    uint256 public constant MIN_TIMEOUT = 1 hours;
+    uint256 public constant MAX_TIMEOUT = 7 days;
 
     Game[] public games;
     uint256 public gameCount = 0;
@@ -56,7 +64,7 @@ contract SimPhanToe is ZamaEthereumConfig {
     euint8 internal WINNER_PLAYER2;
     euint8 internal WINNER_DRAW;
 
-    event GameStarted(uint256 indexed gameId, address indexed player1);
+    event GameStarted(uint256 indexed gameId, address indexed player1, uint256 stake, uint256 moveTimeout);
     event PlayerJoined(uint256 indexed gameId, address indexed player2);
     event MoveSubmitted(uint256 indexed gameId, address indexed player);
     event MoveInvalid(uint256 indexed gameId, address indexed player);
@@ -65,6 +73,8 @@ contract SimPhanToe is ZamaEthereumConfig {
     event Collision(uint256 indexed gameId);
     event GameUpdated(uint256 indexed gameId, Winner winner);
     event BoardRevealed(uint256 indexed gameId);
+    event GameCancelled(uint256 indexed gameId);
+    event GameTimeout(uint256 indexed gameId, address indexed winner);
 
     constructor() {
         CELL_EMPTY = FHE.asEuint8(uint8(Cell.Empty));
@@ -85,8 +95,10 @@ contract SimPhanToe is ZamaEthereumConfig {
     }
 
     /// @notice Start a new game as player 1
-    /// @dev Initializes Game with player 1 and empty board
-    function startGame() external {
+    /// @param _moveTimeout Time limit for each move (between MIN_TIMEOUT and MAX_TIMEOUT)
+    /// @dev Initializes Game with player 1 and empty board. Send ETH to set the stake.
+    function startGame(uint256 _moveTimeout) external payable {
+        require(_moveTimeout >= MIN_TIMEOUT && _moveTimeout <= MAX_TIMEOUT, "Invalid timeout.");
         Game memory game = Game({
             gameId: gameCount,
             player1: msg.sender,
@@ -105,7 +117,10 @@ contract SimPhanToe is ZamaEthereumConfig {
                 [Cell.Empty, Cell.Empty, Cell.Empty, Cell.Empty],
                 [Cell.Empty, Cell.Empty, Cell.Empty, Cell.Empty]
             ],
-            winner: Winner.None
+            winner: Winner.None,
+            stake: msg.value,
+            moveTimeout: _moveTimeout,
+            lastActionTimestamp: 0 // Not set until player2 joins
         });
         games.push(game);
         // Grant the contract permission to use the game's encrypted values
@@ -116,18 +131,21 @@ contract SimPhanToe is ZamaEthereumConfig {
                 FHE.allowThis(games[gameCount].eBoard[i][j]);
             }
         }
-        emit GameStarted(game.gameId, game.player1);
+        emit GameStarted(game.gameId, game.player1, game.stake, game.moveTimeout);
         gameCount++;
     }
 
     /// @notice Join a game as player 2
     /// @param _gameId The ID of the game to join
-    function joinGame(uint256 _gameId) external {
+    /// @dev Must send ETH matching the game's stake
+    function joinGame(uint256 _gameId) external payable {
         Game storage game = games[_gameId];
         require(game.player1 != address(0), "Game not found.");
         require(game.player2 == address(0), "Game is already full.");
         require(msg.sender != game.player1, "Cannot join your own game.");
+        require(msg.value == game.stake, "Must match stake.");
         game.player2 = msg.sender;
+        game.lastActionTimestamp = block.timestamp;
         emit PlayerJoined(_gameId, msg.sender);
     }
 
@@ -239,6 +257,7 @@ contract SimPhanToe is ZamaEthereumConfig {
         if (_collision) {
             game.eCollision = FHE.asEbool(false);
             FHE.allowThis(game.eCollision);
+            game.lastActionTimestamp = block.timestamp;
             emit Collision(_gameId);
             return;
             // clients should reflect the collision in the UI and ask the players to submit another move
@@ -252,6 +271,11 @@ contract SimPhanToe is ZamaEthereumConfig {
                     FHE.makePubliclyDecryptable(game.eBoard[i][j]);
                 }
             }
+            // distribute prizes
+            _distributePrizes(_gameId);
+        } else {
+            // game continues, reset timestamp for next move
+            game.lastActionTimestamp = block.timestamp;
         }
         emit GameUpdated(_gameId, game.winner);
         // clients should reflect the new game state, and if there's a winner,
@@ -283,6 +307,100 @@ contract SimPhanToe is ZamaEthereumConfig {
         emit BoardRevealed(_gameId);
     }
 
+    /// @notice Cancel an unjoined game and get refund
+    /// @param _gameId The game ID to cancel
+    /// @dev Only player1 can cancel, and only before player2 joins
+    function cancelGame(uint256 _gameId) external {
+        Game storage game = games[_gameId];
+        require(msg.sender == game.player1, "Only player1 can cancel.");
+        require(game.player2 == address(0), "Game already has player2.");
+        require(game.winner == Winner.None, "Game already finished.");
+
+        game.winner = Winner.Cancelled;
+        uint256 refund = game.stake;
+        game.stake = 0;
+
+        if (refund > 0) {
+            (bool success, ) = payable(msg.sender).call{value: refund}("");
+            require(success, "Transfer failed.");
+        }
+
+        emit GameCancelled(_gameId);
+    }
+
+    /// @notice Claim victory when opponent has timed out
+    /// @param _gameId The game ID
+    /// @dev Can be called when opponent hasn't completed their move within the timeout period
+    function claimTimeout(uint256 _gameId) external {
+        Game storage game = games[_gameId];
+        require(game.player2 != address(0), "Game has not started.");
+        require(game.winner == Winner.None, "Game already finished.");
+        require(msg.sender == game.player1 || msg.sender == game.player2, "Not a player.");
+        require(block.timestamp > game.lastActionTimestamp + game.moveTimeout, "Timeout not reached.");
+
+        // Determine who timed out based on move status
+        Move memory move1 = nextMoves[_gameId][game.player1];
+        Move memory move2 = nextMoves[_gameId][game.player2];
+
+        bool player1Completed = move1.isMade;
+        bool player2Completed = move2.isMade;
+
+        // If both completed or both didn't complete, it's a draw
+        // If one completed and the other didn't, the one who completed wins
+        Winner winner;
+        if (player1Completed && !player2Completed) {
+            winner = Winner.Player1;
+            require(msg.sender == game.player1, "Only player1 can claim.");
+        } else if (player2Completed && !player1Completed) {
+            winner = Winner.Player2;
+            require(msg.sender == game.player2, "Only player2 can claim.");
+        } else {
+            // Both timed out or both completed (shouldn't happen in normal flow)
+            winner = Winner.Draw;
+        }
+
+        game.winner = winner;
+        
+        // Clean up moves
+        delete nextMoves[_gameId][game.player1];
+        delete nextMoves[_gameId][game.player2];
+
+        // Distribute prizes
+        _distributePrizes(_gameId);
+
+        address winnerAddress = winner == Winner.Player1 ? game.player1 :
+            (winner == Winner.Player2 ? game.player2 : address(0));
+        emit GameTimeout(_gameId, winnerAddress);
+    }
+
+    /// @notice Distribute prizes based on game outcome
+    /// @param _gameId The game ID
+    function _distributePrizes(uint256 _gameId) private {
+        Game storage game = games[_gameId];
+        uint256 totalStake = game.stake * 2;
+        
+        if (totalStake == 0) return;
+
+        // Clear stake to prevent re-entrancy
+        game.stake = 0;
+
+        if (game.winner == Winner.Player1) {
+            (bool success, ) = payable(game.player1).call{value: totalStake}("");
+            require(success, "Transfer failed.");
+        } else if (game.winner == Winner.Player2) {
+            (bool success, ) = payable(game.player2).call{value: totalStake}("");
+            require(success, "Transfer failed.");
+        } else if (game.winner == Winner.Draw) {
+            // Split evenly
+            uint256 half = totalStake / 2;
+            (bool success1, ) = payable(game.player1).call{value: half}("");
+            require(success1, "Transfer to player1 failed.");
+            (bool success2, ) = payable(game.player2).call{value: totalStake - half}("");
+            require(success2, "Transfer to player2 failed.");
+        }
+        // Winner.Cancelled is handled separately in cancelGame
+    }
+
     /// @notice Get game data
     /// @param _gameId The game ID
     /// @return Game struct
@@ -295,14 +413,14 @@ contract SimPhanToe is ZamaEthereumConfig {
     function getOpenGames() external view returns (uint256[] memory) {
         uint256 count = 0;
         for (uint256 i = 0; i < gameCount; i++) {
-            if (games[i].player2 == address(0)) {
+            if (games[i].player2 == address(0) && games[i].winner == Winner.None) {
                 count++;
             }
         }
         uint256[] memory openGames = new uint256[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < gameCount; i++) {
-            if (games[i].player2 == address(0)) {
+            if (games[i].player2 == address(0) && games[i].winner == Winner.None) {
                 openGames[index] = i;
                 index++;
             }
