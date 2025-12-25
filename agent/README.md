@@ -37,7 +37,7 @@ Required environment variables:
 
 - `OPENAI_API_KEY` - Your OpenAI API key
 - `PRIVATE_KEY` - Agent wallet private key (with Sepolia ETH)
-- `SIMPHANTOE_ADDRESS` - Contract address (default: `0x52507f480444c844b1AB304f4Cbc5fED6077E8f0`)
+- `SIMPHANTOE_ADDRESS` - Contract address (default: `0xF72E2d02476cAcbcE01c164da33858C49Fa55036`)
 - `SEPOLIA_RPC_URL` - Sepolia RPC endpoint
 
 Optional:

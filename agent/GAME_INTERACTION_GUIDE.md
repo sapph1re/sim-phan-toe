@@ -80,7 +80,7 @@ Most operations in SimPhanToe follow a two-phase pattern:
 
 ```
 Network: Sepolia Testnet (Chain ID: 11155111)
-Contract Address: 0x52507f480444c844b1AB304f4Cbc5fED6077E8f0
+Contract Address: 0xF72E2d02476cAcbcE01c164da33858C49Fa55036
 ```
 
 ### Contract ABI Summary
