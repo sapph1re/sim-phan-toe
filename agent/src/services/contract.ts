@@ -443,8 +443,22 @@ export class ContractService {
     };
 
     const movesResult = results[1].result as readonly [
-      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
-      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
+      {
+        isSubmitted: boolean;
+        isMade: boolean;
+        isInvalid: `0x${string}`;
+        isCellOccupied: `0x${string}`;
+        x: `0x${string}`;
+        y: `0x${string}`;
+      },
+      {
+        isSubmitted: boolean;
+        isMade: boolean;
+        isInvalid: `0x${string}`;
+        isCellOccupied: `0x${string}`;
+        x: `0x${string}`;
+        y: `0x${string}`;
+      },
     ];
 
     const game: GameData = {
@@ -487,7 +501,10 @@ export class ContractService {
    * OPTIMIZED: Batch fetch game data, moves, and canSubmitMove in a single RPC call
    * This reduces RPC calls from 3 to 1 for comprehensive game state checks
    */
-  async getGameState(gameId: bigint, player: `0x${string}`): Promise<{
+  async getGameState(
+    gameId: bigint,
+    player: `0x${string}`,
+  ): Promise<{
     game: GameData;
     moves: [MoveData, MoveData];
     canSubmit: boolean;
@@ -541,8 +558,22 @@ export class ContractService {
     };
 
     const movesResult = results[1].result as readonly [
-      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
-      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
+      {
+        isSubmitted: boolean;
+        isMade: boolean;
+        isInvalid: `0x${string}`;
+        isCellOccupied: `0x${string}`;
+        x: `0x${string}`;
+        y: `0x${string}`;
+      },
+      {
+        isSubmitted: boolean;
+        isMade: boolean;
+        isInvalid: `0x${string}`;
+        isCellOccupied: `0x${string}`;
+        x: `0x${string}`;
+        y: `0x${string}`;
+      },
     ];
 
     const game: GameData = {

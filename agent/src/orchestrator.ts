@@ -257,7 +257,7 @@ export class GameOrchestrator {
    * Ensure we have two open games waiting for opponents:
    * - One free game (stake = 0)
    * - One paid game (stake = 0.01 ETH) if balance permits
-   * 
+   *
    * OPTIMIZED: Uses cached stake from DB instead of making RPC calls per game.
    * This reduces RPC usage from N calls/second to 0 calls for game categorization.
    */

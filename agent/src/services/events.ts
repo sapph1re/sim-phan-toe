@@ -1,7 +1,15 @@
 // Hybrid event service: WebSocket subscriptions with polling fallback
 // Watches for contract events and notifies the orchestrator
 
-import { createPublicClient, http, webSocket, keccak256, toBytes, type PublicClient, type WatchContractEventReturnType } from "viem";
+import {
+  createPublicClient,
+  http,
+  webSocket,
+  keccak256,
+  toBytes,
+  type PublicClient,
+  type WatchContractEventReturnType,
+} from "viem";
 import { sepolia } from "viem/chains";
 import { createLogger } from "../utils/logger.js";
 import { SIMPHANTOE_ABI } from "./contract.js";
@@ -259,7 +267,7 @@ export class EventService {
             try {
               // Decode gameId from the indexed topic (padded to 32 bytes)
               const gameId = BigInt(log.topics[1]);
-              
+
               // Determine event name from topic[0] (event signature hash)
               const eventName = this.getEventNameFromSignature(log.topics[0]);
               if (eventName) {
@@ -290,7 +298,7 @@ export class EventService {
    */
   private getEventNameFromSignature(signature: `0x${string}` | undefined): GameEventName | null {
     if (!signature) return null;
-    
+
     // Event signature hashes (keccak256 of "EventName(type1,type2,...)")
     const signatureMap: Record<string, GameEventName> = {
       // GameStarted(uint256 indexed gameId, address indexed player1, uint256 stake, uint256 moveTimeout)
