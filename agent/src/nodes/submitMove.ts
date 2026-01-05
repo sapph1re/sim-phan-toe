@@ -37,9 +37,10 @@ export async function submitMove(state: AgentState): Promise<Partial<AgentState>
   try {
     // =========================================================================
     // 1. Precondition check: is move already submitted on-chain?
+    // OPTIMIZED: Use multicall to batch getGame + getMoves into single RPC call
     // =========================================================================
-    const [move1, move2] = await contract.getMoves(gameId);
-    const game = await contract.getGame(gameId);
+    const { game, moves } = await contract.getGameWithMoves(gameId);
+    const [move1, move2] = moves;
     const isPlayer1 = game.player1.toLowerCase() === playerAddress.toLowerCase();
     const myMove = isPlayer1 ? move1 : move2;
 

@@ -63,6 +63,16 @@ CREATE TABLE IF NOT EXISTS tx_markers (
   PRIMARY KEY (chain_id, contract_address, game_id, action)
 );
 
+-- Add stake column for caching game stakes (avoids RPC calls)
+-- This is idempotent - won't error if column already exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'games' AND column_name = 'stake') THEN
+    ALTER TABLE games ADD COLUMN stake TEXT DEFAULT '0';
+  END IF;
+END $$;
+
 -- Indexes for efficient queries
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
 CREATE INDEX IF NOT EXISTS idx_games_next_check ON games(next_check_at) WHERE status = 'active';

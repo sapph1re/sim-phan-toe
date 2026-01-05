@@ -71,8 +71,9 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
         logger.info("Previous finalizeGameState transaction succeeded");
         await gameStore.updateTxMarker(gameKey, "finalizeGameState", { txStatus: "confirmed" });
 
-        // Re-fetch game state to see result
-        const updatedGame = await contract.getGame(gameId);
+        // OPTIMIZED: Use multicall to batch getGame + getMoves into single RPC call
+        const { game: updatedGame, moves: updatedMoves } = await contract.getGameWithMoves(gameId);
+        const [move1, move2] = updatedMoves;
 
         if (updatedGame.winner !== Winner.None) {
           return {
@@ -84,7 +85,6 @@ export async function finalizeGameState(state: AgentState): Promise<Partial<Agen
         }
 
         // Check for collision by seeing if moves were reset
-        const [move1, move2] = await contract.getMoves(gameId);
         if (!move1.isSubmitted && !move2.isSubmitted) {
           // Moves were cleared - likely a collision occurred
           logger.info("Collision detected - moves were reset");

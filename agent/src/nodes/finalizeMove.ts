@@ -75,9 +75,9 @@ export async function finalizeMove(state: AgentState): Promise<Partial<AgentStat
         logger.info("Previous finalizeMove transaction succeeded");
         await gameStore.updateTxMarker(gameKey, "finalizeMove", { txStatus: "confirmed" });
 
-        // Re-fetch move state to see result
-        const [move1, move2] = await contract.getMoves(gameId);
-        const game = await contract.getGame(gameId);
+        // OPTIMIZED: Use multicall to batch getGame + getMoves into single RPC call
+        const { game, moves } = await contract.getGameWithMoves(gameId);
+        const [move1, move2] = moves;
         const isPlayer1 = game.player1.toLowerCase() === playerAddress.toLowerCase();
         const updatedMyMove = isPlayer1 ? move1 : move2;
 

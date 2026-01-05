@@ -19,6 +19,7 @@ export interface GameRecord {
   current_round: number;
   winner: number;
   status: "active" | "completed" | "abandoned";
+  stake: string; // Stored as string to handle bigint serialization
   waiting_since: Date | null;
   last_opponent_activity: Date | null;
   last_check_at: Date | null;
@@ -81,6 +82,7 @@ export async function createGame(
     currentPhase?: string;
     status?: "active" | "completed" | "abandoned";
     nextCheckAt?: Date;
+    stake?: bigint; // Store stake to avoid RPC calls for categorization
   },
 ): Promise<void> {
   logger.info("Creating game record", { gameId: key.gameId.toString() });
@@ -88,12 +90,13 @@ export async function createGame(
   await query(
     `INSERT INTO games (
       game_id, chain_id, contract_address, player_address, is_player1,
-      current_phase, status, next_check_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      current_phase, status, next_check_at, stake
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     ON CONFLICT (chain_id, contract_address, game_id) DO UPDATE SET
       current_phase = EXCLUDED.current_phase,
       status = EXCLUDED.status,
       next_check_at = EXCLUDED.next_check_at,
+      stake = EXCLUDED.stake,
       updated_at = NOW()`,
     [
       key.gameId.toString(),
@@ -104,6 +107,7 @@ export async function createGame(
       data.currentPhase || "idle",
       data.status || "active",
       data.nextCheckAt || new Date(),
+      (data.stake ?? 0n).toString(),
     ],
   );
 }
@@ -132,6 +136,7 @@ export async function updateGame(
     currentRound: number;
     winner: number;
     status: "active" | "completed" | "abandoned" | "errored";
+    stake: bigint;
     waitingSince: Date | null;
     lastOpponentActivity: Date | null;
     lastCheckAt: Date | null;
@@ -163,6 +168,10 @@ export async function updateGame(
   if (updates.status !== undefined) {
     setClauses.push(`status = $${paramIndex++}`);
     values.push(updates.status);
+  }
+  if (updates.stake !== undefined) {
+    setClauses.push(`stake = $${paramIndex++}`);
+    values.push(updates.stake.toString());
   }
   if (updates.waitingSince !== undefined) {
     setClauses.push(`waiting_since = $${paramIndex++}`);

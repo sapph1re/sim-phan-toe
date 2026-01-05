@@ -1,7 +1,7 @@
 // Hybrid event service: WebSocket subscriptions with polling fallback
 // Watches for contract events and notifies the orchestrator
 
-import { createPublicClient, http, webSocket, type PublicClient, type WatchContractEventReturnType } from "viem";
+import { createPublicClient, http, webSocket, keccak256, toBytes, type PublicClient, type WatchContractEventReturnType } from "viem";
 import { sepolia } from "viem/chains";
 import { createLogger } from "../utils/logger.js";
 import { SIMPHANTOE_ABI } from "./contract.js";
@@ -210,8 +210,9 @@ export class EventService {
 
     logger.info("Starting event polling fallback");
 
-    // Poll every 10 seconds
-    const POLL_INTERVAL_MS = 10000;
+    // Poll every 30 seconds - reduced from 10s to minimize RPC usage
+    // WebSocket should be the primary method; polling is fallback
+    const POLL_INTERVAL_MS = 30000;
 
     this.pollInterval = setInterval(async () => {
       await this.pollForEvents();
@@ -223,6 +224,8 @@ export class EventService {
 
   /**
    * Poll for new events since last check
+   * OPTIMIZED: Uses a single getLogs call with no event filter to fetch ALL events
+   * Then filters client-side. This reduces RPC calls from 11 to 2 per poll cycle.
    */
   private async pollForEvents(): Promise<void> {
     if (!this.publicClient) return;
@@ -239,70 +242,98 @@ export class EventService {
         toBlock: currentBlock.toString(),
       });
 
-      // Get all event types
-      const eventConfigs = [
-        { name: "GameStarted" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        { name: "PlayerJoined" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        {
-          name: "MoveSubmitted" as const,
-          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
-        },
-        { name: "MoveMade" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        {
-          name: "MovesProcessed" as const,
-          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
-        },
-        { name: "Collision" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        { name: "GameUpdated" as const, filter: { name: "gameId" as const, type: "uint256" as const, indexed: true } },
-        {
-          name: "BoardRevealed" as const,
-          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
-        },
-        {
-          name: "GameCancelled" as const,
-          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
-        },
-        {
-          name: "GameTimeout" as const,
-          filter: { name: "gameId" as const, type: "uint256" as const, indexed: true },
-        },
-      ];
+      // OPTIMIZATION: Single getLogs call for ALL contract events instead of 10 separate calls
+      // This reduces RPC usage by ~90% for event polling
+      try {
+        const logs = await this.publicClient.getLogs({
+          address: this.contractAddress,
+          fromBlock: this.lastPolledBlock + 1n,
+          toBlock: currentBlock,
+        });
 
-      for (const config of eventConfigs) {
-        try {
-          const logs = await this.publicClient.getLogs({
-            address: this.contractAddress,
-            event: {
-              type: "event",
-              name: config.name,
-              inputs: [
-                { name: "gameId", type: "uint256", indexed: true },
-                // Other inputs vary by event but we only need gameId
-              ],
-            },
-            fromBlock: this.lastPolledBlock + 1n,
-            toBlock: currentBlock,
-          });
-
-          for (const log of logs) {
-            // Type assertion needed due to dynamic event configuration
-            const args = log.args as { gameId?: bigint };
-            if (args.gameId !== undefined) {
-              await this.notifyCallback(args.gameId, config.name);
+        // Process all logs and extract gameId from indexed topic
+        for (const log of logs) {
+          // The first topic is the event signature, second topic (if indexed) is gameId
+          // All our events have gameId as the first indexed parameter
+          if (log.topics.length >= 2 && log.topics[1]) {
+            try {
+              // Decode gameId from the indexed topic (padded to 32 bytes)
+              const gameId = BigInt(log.topics[1]);
+              
+              // Determine event name from topic[0] (event signature hash)
+              const eventName = this.getEventNameFromSignature(log.topics[0]);
+              if (eventName) {
+                await this.notifyCallback(gameId, eventName);
+              }
+            } catch (parseError) {
+              logger.debug("Failed to parse log", {
+                error: parseError instanceof Error ? parseError.message : String(parseError),
+              });
             }
           }
-        } catch (error) {
-          // Some events might fail to parse, continue with others
-          logger.debug(`Failed to poll ${config.name} events`, {
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
+      } catch (error) {
+        logger.warn("Failed to poll contract events", {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
 
       this.lastPolledBlock = currentBlock;
     } catch (error) {
       logger.error("Error polling for events", error);
     }
+  }
+
+  /**
+   * Map event signature hash to event name
+   * Pre-computed keccak256 hashes of event signatures
+   */
+  private getEventNameFromSignature(signature: `0x${string}` | undefined): GameEventName | null {
+    if (!signature) return null;
+    
+    // Event signature hashes (keccak256 of "EventName(type1,type2,...)")
+    const signatureMap: Record<string, GameEventName> = {
+      // GameStarted(uint256 indexed gameId, address indexed player1, uint256 stake, uint256 moveTimeout)
+      "0x0f9f3de0f0f9f3de0f0f9f3de0": "GameStarted", // Placeholder - computed below
+      // PlayerJoined(uint256 indexed gameId, address indexed player2)
+      // MoveSubmitted(uint256 indexed gameId, address indexed player)
+      // etc.
+    };
+
+    // Lazily compute signature hashes on first use
+    if (!this.eventSignatures) {
+      this.eventSignatures = this.computeEventSignatures();
+    }
+
+    return this.eventSignatures.get(signature.toLowerCase()) || null;
+  }
+
+  private eventSignatures: Map<string, GameEventName> | null = null;
+
+  /**
+   * Compute keccak256 hashes of event signatures
+   */
+  private computeEventSignatures(): Map<string, GameEventName> {
+    const eventSigs: [string, GameEventName][] = [
+      ["GameStarted(uint256,address,uint256,uint256)", "GameStarted"],
+      ["PlayerJoined(uint256,address)", "PlayerJoined"],
+      ["MoveSubmitted(uint256,address)", "MoveSubmitted"],
+      ["MoveInvalid(uint256,address)", "MoveInvalid"],
+      ["MoveMade(uint256,address)", "MoveMade"],
+      ["MovesProcessed(uint256)", "MovesProcessed"],
+      ["Collision(uint256)", "Collision"],
+      ["GameUpdated(uint256,uint8)", "GameUpdated"],
+      ["BoardRevealed(uint256)", "BoardRevealed"],
+      ["GameCancelled(uint256)", "GameCancelled"],
+      ["GameTimeout(uint256,address)", "GameTimeout"],
+    ];
+
+    const map = new Map<string, GameEventName>();
+    for (const [sig, name] of eventSigs) {
+      const hash = keccak256(toBytes(sig));
+      map.set(hash.toLowerCase(), name);
+    }
+    return map;
   }
 
   /**

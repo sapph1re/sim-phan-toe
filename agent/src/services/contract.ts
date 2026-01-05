@@ -398,6 +398,189 @@ export class ContractService {
     return canSubmit;
   }
 
+  /**
+   * OPTIMIZED: Batch fetch game data and moves in a single RPC call using multicall
+   * This reduces RPC calls from 2 to 1 for game state checks
+   */
+  async getGameWithMoves(gameId: bigint): Promise<{ game: GameData; moves: [MoveData, MoveData] }> {
+    const results = await this.publicClient.multicall({
+      contracts: [
+        {
+          address: this.contractAddress,
+          abi: SIMPHANTOE_ABI,
+          functionName: "getGame",
+          args: [gameId],
+        },
+        {
+          address: this.contractAddress,
+          abi: SIMPHANTOE_ABI,
+          functionName: "getMoves",
+          args: [gameId],
+        },
+      ],
+    });
+
+    // Handle potential failures
+    if (results[0].status === "failure") {
+      throw new Error(`Failed to get game: ${results[0].error?.message || "Unknown error"}`);
+    }
+    if (results[1].status === "failure") {
+      throw new Error(`Failed to get moves: ${results[1].error?.message || "Unknown error"}`);
+    }
+
+    const gameResult = results[0].result as {
+      gameId: bigint;
+      player1: `0x${string}`;
+      player2: `0x${string}`;
+      eBoard: readonly (readonly `0x${string}`[])[];
+      eWinner: `0x${string}`;
+      eCollision: `0x${string}`;
+      board: readonly (readonly number[])[];
+      winner: number;
+      stake: bigint;
+      moveTimeout: bigint;
+      lastActionTimestamp: bigint;
+    };
+
+    const movesResult = results[1].result as readonly [
+      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
+      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
+    ];
+
+    const game: GameData = {
+      gameId: gameResult.gameId,
+      player1: gameResult.player1,
+      player2: gameResult.player2,
+      eBoard: gameResult.eBoard,
+      eWinner: gameResult.eWinner,
+      eCollision: gameResult.eCollision,
+      board: gameResult.board,
+      winner: gameResult.winner,
+      stake: gameResult.stake,
+      moveTimeout: gameResult.moveTimeout,
+      lastActionTimestamp: gameResult.lastActionTimestamp,
+    };
+
+    const moves: [MoveData, MoveData] = [
+      {
+        isSubmitted: movesResult[0].isSubmitted,
+        isMade: movesResult[0].isMade,
+        isInvalid: movesResult[0].isInvalid,
+        isCellOccupied: movesResult[0].isCellOccupied,
+        x: movesResult[0].x,
+        y: movesResult[0].y,
+      },
+      {
+        isSubmitted: movesResult[1].isSubmitted,
+        isMade: movesResult[1].isMade,
+        isInvalid: movesResult[1].isInvalid,
+        isCellOccupied: movesResult[1].isCellOccupied,
+        x: movesResult[1].x,
+        y: movesResult[1].y,
+      },
+    ];
+
+    return { game, moves };
+  }
+
+  /**
+   * OPTIMIZED: Batch fetch game data, moves, and canSubmitMove in a single RPC call
+   * This reduces RPC calls from 3 to 1 for comprehensive game state checks
+   */
+  async getGameState(gameId: bigint, player: `0x${string}`): Promise<{
+    game: GameData;
+    moves: [MoveData, MoveData];
+    canSubmit: boolean;
+  }> {
+    const results = await this.publicClient.multicall({
+      contracts: [
+        {
+          address: this.contractAddress,
+          abi: SIMPHANTOE_ABI,
+          functionName: "getGame",
+          args: [gameId],
+        },
+        {
+          address: this.contractAddress,
+          abi: SIMPHANTOE_ABI,
+          functionName: "getMoves",
+          args: [gameId],
+        },
+        {
+          address: this.contractAddress,
+          abi: SIMPHANTOE_ABI,
+          functionName: "canSubmitMove",
+          args: [gameId, player],
+        },
+      ],
+    });
+
+    // Handle potential failures
+    if (results[0].status === "failure") {
+      throw new Error(`Failed to get game: ${results[0].error?.message || "Unknown error"}`);
+    }
+    if (results[1].status === "failure") {
+      throw new Error(`Failed to get moves: ${results[1].error?.message || "Unknown error"}`);
+    }
+    if (results[2].status === "failure") {
+      throw new Error(`Failed to check canSubmitMove: ${results[2].error?.message || "Unknown error"}`);
+    }
+
+    const gameResult = results[0].result as {
+      gameId: bigint;
+      player1: `0x${string}`;
+      player2: `0x${string}`;
+      eBoard: readonly (readonly `0x${string}`[])[];
+      eWinner: `0x${string}`;
+      eCollision: `0x${string}`;
+      board: readonly (readonly number[])[];
+      winner: number;
+      stake: bigint;
+      moveTimeout: bigint;
+      lastActionTimestamp: bigint;
+    };
+
+    const movesResult = results[1].result as readonly [
+      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
+      { isSubmitted: boolean; isMade: boolean; isInvalid: `0x${string}`; isCellOccupied: `0x${string}`; x: `0x${string}`; y: `0x${string}` },
+    ];
+
+    const game: GameData = {
+      gameId: gameResult.gameId,
+      player1: gameResult.player1,
+      player2: gameResult.player2,
+      eBoard: gameResult.eBoard,
+      eWinner: gameResult.eWinner,
+      eCollision: gameResult.eCollision,
+      board: gameResult.board,
+      winner: gameResult.winner,
+      stake: gameResult.stake,
+      moveTimeout: gameResult.moveTimeout,
+      lastActionTimestamp: gameResult.lastActionTimestamp,
+    };
+
+    const moves: [MoveData, MoveData] = [
+      {
+        isSubmitted: movesResult[0].isSubmitted,
+        isMade: movesResult[0].isMade,
+        isInvalid: movesResult[0].isInvalid,
+        isCellOccupied: movesResult[0].isCellOccupied,
+        x: movesResult[0].x,
+        y: movesResult[0].y,
+      },
+      {
+        isSubmitted: movesResult[1].isSubmitted,
+        isMade: movesResult[1].isMade,
+        isInvalid: movesResult[1].isInvalid,
+        isCellOccupied: movesResult[1].isCellOccupied,
+        x: movesResult[1].x,
+        y: movesResult[1].y,
+      },
+    ];
+
+    return { game, moves, canSubmit: results[2].result as boolean };
+  }
+
   // Write functions
   async startGame(moveTimeout: bigint, stake?: bigint): Promise<{ txHash: `0x${string}`; gameId: bigint }> {
     logger.info("Starting new game...", { moveTimeout: moveTimeout.toString(), stake: stake?.toString() || "0" });

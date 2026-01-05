@@ -228,7 +228,7 @@ export class GameOrchestrator {
     try {
       const { gameId, txHash } = await contract.startGame(DEFAULT_MOVE_TIMEOUT, stake);
 
-      // Create game record in DB
+      // Create game record in DB with stake cached to avoid future RPC calls
       const gameKey = createGameKey(CHAIN_ID, this.contractAddress, gameId);
       await gameStore.createGame(gameKey, {
         playerAddress: this.playerAddress,
@@ -236,6 +236,7 @@ export class GameOrchestrator {
         currentPhase: GamePhase.WaitingForOpponent,
         status: "active",
         nextCheckAt: new Date(Date.now() + 20_000), // Check in 20s
+        stake: stake, // Cache stake to avoid RPC calls in ensureOpenGames
       });
 
       logger.info("Created open game", {
@@ -256,27 +257,24 @@ export class GameOrchestrator {
    * Ensure we have two open games waiting for opponents:
    * - One free game (stake = 0)
    * - One paid game (stake = 0.01 ETH) if balance permits
+   * 
+   * OPTIMIZED: Uses cached stake from DB instead of making RPC calls per game.
+   * This reduces RPC usage from N calls/second to 0 calls for game categorization.
    */
   private async ensureOpenGames(): Promise<void> {
     const openGames = await gameStore.getGamesWaitingForOpponent(CHAIN_ID, this.contractAddress);
-    const contract = getContractService();
 
-    // Categorize open games by stake
+    // Categorize open games by cached stake (no RPC calls!)
     const freeGames: GameRecord[] = [];
     const paidGames: GameRecord[] = [];
 
     for (const game of openGames) {
-      try {
-        const gameData = await contract.getGame(game.game_id);
-        if (gameData.stake === 0n) {
-          freeGames.push(game);
-        } else {
-          paidGames.push(game);
-        }
-      } catch (error) {
-        logger.warn("Failed to fetch game data for categorization", {
-          gameId: game.game_id.toString(),
-        });
+      // Use cached stake from DB instead of fetching from chain
+      const stake = BigInt(game.stake || "0");
+      if (stake === 0n) {
+        freeGames.push(game);
+      } else {
+        paidGames.push(game);
       }
     }
 
@@ -501,6 +499,23 @@ export class GameOrchestrator {
       // Check if game already exists in DB
       const existingGame = await gameStore.getGame(gameKey);
       if (existingGame) {
+        // Update stake if missing (for games created before stake caching)
+        if (!existingGame.stake || existingGame.stake === "0") {
+          try {
+            const gameData = await contract.getGame(gameId);
+            if (gameData.stake > 0n) {
+              await gameStore.updateGame(gameKey, { stake: gameData.stake });
+              logger.debug("Updated cached stake for existing game", {
+                gameId: gameId.toString(),
+                stake: gameData.stake.toString(),
+              });
+            }
+          } catch (error) {
+            logger.warn("Failed to update stake for existing game", {
+              gameId: gameId.toString(),
+            });
+          }
+        }
         continue; // Already tracked
       }
 
@@ -521,19 +536,21 @@ export class GameOrchestrator {
         currentPhase = GamePhase.Idle; // Will be determined by checkGameState
       }
 
-      // Create game record
+      // Create game record with cached stake
       await gameStore.createGame(gameKey, {
         playerAddress: this.playerAddress,
         isPlayer1,
         currentPhase,
         status,
         nextCheckAt: new Date(), // Check immediately
+        stake: gameData.stake, // Cache stake to avoid future RPC calls
       });
 
       logger.info("Synced game from chain", {
         gameId: gameId.toString(),
         isPlayer1,
         phase: currentPhase,
+        stake: gameData.stake.toString(),
       });
     }
 

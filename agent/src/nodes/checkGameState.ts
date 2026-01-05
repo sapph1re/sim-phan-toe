@@ -21,8 +21,9 @@ export async function checkGameState(state: AgentState): Promise<Partial<AgentSt
 
   try {
     const contract = getContractService();
-    const game = await contract.getGame(gameId);
-    const [move1, move2] = await contract.getMoves(gameId);
+    // OPTIMIZED: Use multicall to batch getGame + getMoves into single RPC call
+    const { game, moves } = await contract.getGameWithMoves(gameId);
+    const [move1, move2] = moves;
 
     // Determine if we're player1 or player2
     const isPlayer1 = game.player1.toLowerCase() === playerAddress.toLowerCase();
